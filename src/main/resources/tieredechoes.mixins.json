@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "org.bitwisemadness.tieredechoes.common.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "tieredechoes.refmap.json",
+  "mixins": [
+    "ItemStackRarityMixin"
+  ],
+  "client": [],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

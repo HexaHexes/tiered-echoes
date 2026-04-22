@@ -1,0 +1,198 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'org.spongepowered.mixin' version '0.7.38'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty 'java.vm.version'} (${System.getProperty 'java.vendor'}), Arch: ${System.getProperty 'os.arch'}"
+
+minecraft {
+    mappings channel: mapping_channel, version: mapping_version
+    copyIdeResources = true
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+
+            // Needed so refmaps are remapped correctly in dev runs.
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${project.buildDir}/createSrgToMcp/output.srg"
+
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        client {
+            property 'forge.enabledGameTestNamespaces', mod_id
+            arg '-mixin.config=tieredechoes.mixins.json'
+        }
+
+        server {
+            property 'forge.enabledGameTestNamespaces', mod_id
+            args '--nogui'
+            arg '-mixin.config=tieredechoes.mixins.json'
+        }
+
+        gameTestServer {
+            property 'forge.enabledGameTestNamespaces', mod_id
+            arg '-mixin.config=tieredechoes.mixins.json'
+        }
+
+        data {
+            workingDirectory project.file('run-data')
+            arg '-mixin.config=tieredechoes.mixins.json'
+            args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+        }
+    }
+}
+
+sourceSets {
+    main {
+        resources {
+            srcDir 'src/main/resources'
+            srcDir 'src/generated/resources'
+        }
+    }
+}
+
+repositories {
+    maven {
+        name = "Jared's maven"
+        url = uri("https://maven.blamejared.com/")
+    }
+    maven {
+        name = "CurseMaven"
+        url = uri("https://cursemaven.com")
+        content { includeGroup("curse.maven") }
+    }
+    maven {
+        name = "ModMaven"
+        url = uri("https://modmaven.dev")
+    }
+    mavenCentral()
+    maven {
+        name = "SpongePowered"
+        url = uri("https://repo.spongepowered.org/repository/maven-public/")
+    }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+
+    implementation("com.google.guava:guava:33.5.0-jre") { because("Security/compat override requested.") }
+    implementation("io.netty:netty-codec:4.2.7.Final") { because("Security/compat override requested.") }
+    implementation("io.netty:netty-handler:4.2.7.Final") { because("Security/compat override requested.") }
+    implementation("org.apache.commons:commons-compress:1.27.1") { because("Security/compat override requested.") }
+
+    compileOnly("org.projectlombok:lombok:1.18.42")
+    annotationProcessor("org.projectlombok:lombok:1.18.42")
+    testCompileOnly("org.projectlombok:lombok:1.18.42")
+    testAnnotationProcessor("org.projectlombok:lombok:1.18.42")
+
+    // Forge already ships Mixin at runtime; only the processor is needed for annotation processing/refmap generation.
+    annotationProcessor("org.spongepowered:mixin:0.8.5:processor")
+
+    compileOnly fg.deobf("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
+    compileOnly fg.deobf("mezz.jei:jei-${minecraft_version}-forge-api:${jei_version}")
+    runtimeOnly fg.deobf("mezz.jei:jei-${minecraft_version}-forge:${jei_version}")
+
+//    runtimeOnly(fg.deobf("curse.maven:prism-lib-638111:4650325"))
+//    runtimeOnly(fg.deobf("curse.maven:iceberg-520110:5838149"))
+//    runtimeOnly(fg.deobf("curse.maven:legendary-tooltips-532127:4662781"))
+
+    runtimeOnly(fg.deobf("curse.maven:sophisticated-core-618298:7916595"))
+    runtimeOnly(fg.deobf("curse.maven:sophisticated-backpacks-422301:7916619"))
+
+    runtimeOnly(fg.deobf("curse.maven:placebo-283644:6274231"))
+    runtimeOnly(fg.deobf("curse.maven:apothic-attributes-898963:5634071"))
+    runtimeOnly(fg.deobf("curse.maven:apotheosis-313970:6461960"))
+
+    runtimeOnly(fg.deobf("curse.maven:ars-nouveau-401955:6688854"))
+    runtimeOnly(fg.deobf("curse.maven:curios-309927:6418456"))
+    runtimeOnly(fg.deobf("curse.maven:legendary-survival-overhaul-840254:7603852"))
+}
+
+mixin {
+    add sourceSets.main, "tieredechoes.refmap.json"
+    config "tieredechoes.mixins.json"
+    debug.export = true
+    debug.verbose = true
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from('src/main/resources') {
+        include 'tieredechoes.mixins.json'
+    }
+
+    exclude 'assets/tieredechoes/lang/en_us.json'
+
+    var replaceProperties = [
+            minecraft_version: minecraft_version, minecraft_version_range: minecraft_version_range,
+            forge_version: forge_version, forge_version_range: forge_version_range,
+            loader_version_range: loader_version_range,
+            mod_id: mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
+            mod_authors: mod_authors, mod_description: mod_description,
+    ]
+    inputs.properties replaceProperties
+
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties + [project: project]
+    }
+
+    from('src/generated/resources') {
+        exclude 'assets/tieredechoes/lang/en_us.json'
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_id,
+                'Specification-Vendor'    : mod_authors,
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.jar.archiveVersion,
+                'Implementation-Vendor'   : mod_authors,
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                'MixinConfigs'            : 'tieredechoes.mixins.json'
+        ])
+    }
+
+    finalizedBy 'reobfJar'
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifact jar
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/mcmodsrepo"
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
