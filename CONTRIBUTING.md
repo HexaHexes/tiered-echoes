@@ -24,6 +24,20 @@ five commits still lands as a single commit. Write the PR title as a
 sentence-case imperative, because the squash commit's subject line is taken
 from it.
 
+`main` is protected, and the rules are enforced by GitHub rather than by
+agreement, so they hold for maintainers too:
+
+- **One approving review from someone with write access** before merge.
+  Admins are not exempt.
+- **Squash only.** Merge commits and rebases are disabled, so the one-PR-one-
+  commit rule above cannot be broken by picking the wrong button.
+- **No force-push, no deleting `main`.**
+- **Head branch is deleted automatically** once the PR merges.
+
+A green build is not approval. The suite proves the code does what it says;
+it cannot prove the code says the right thing, so that is what the review is
+for.
+
 Before pushing, run both checks locally. CI is the gate, and a red PR costs a
 round trip:
 
