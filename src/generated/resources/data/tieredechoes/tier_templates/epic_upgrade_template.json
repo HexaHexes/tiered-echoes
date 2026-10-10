@@ -1,0 +1,7 @@
+{
+  "id": "tieredechoes:epic_upgrade_template",
+  "item": "tieredechoes:epic_upgrade_template",
+  "kind": "upgrade",
+  "schema_version": 1,
+  "tier": "tieredechoes:epic"
+}

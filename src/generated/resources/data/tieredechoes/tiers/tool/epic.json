@@ -1,0 +1,36 @@
+{
+  "attribute_multipliers": {
+    "armor": 1.4,
+    "armor_toughness": 1.35,
+    "attack_damage": 1.4,
+    "attack_speed": 1.12,
+    "cold_resistance": 1.4,
+    "durability": 1.35,
+    "heat_resistance": 1.4,
+    "knockback_resistance": 1.25,
+    "mana_regen": 1.25,
+    "max_mana": 1.4,
+    "thermal_resistance": 1.4
+  },
+  "compat_amplifiers": {},
+  "curios_set_bonuses": {
+    "*2": 1.12,
+    "*3": 1.18,
+    "*4": 1.24
+  },
+  "display_rarity": "EPIC",
+  "domain": "tool",
+  "downgrade_ingredient": {
+    "item": "minecraft:diamond"
+  },
+  "experience_required": 150,
+  "generated_downgrade_template": true,
+  "generated_upgrade_template": true,
+  "id": "tieredechoes:epic",
+  "previous_tier": "tieredechoes:rare",
+  "schema_version": 1,
+  "sort_order": 3,
+  "upgrade_ingredient": {
+    "item": "minecraft:netherite_ingot"
+  }
+}

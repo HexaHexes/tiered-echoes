@@ -1,0 +1,33 @@
+{
+  "attribute_multipliers": {
+    "armor": 1.0,
+    "armor_toughness": 1.0,
+    "attack_damage": 1.0,
+    "attack_speed": 1.0,
+    "cold_resistance": 1.0,
+    "durability": 1.0,
+    "heat_resistance": 1.0,
+    "knockback_resistance": 1.0,
+    "mana_regen": 1.0,
+    "max_mana": 1.0,
+    "thermal_resistance": 1.0
+  },
+  "compat_amplifiers": {},
+  "curios_set_bonuses": {
+    "*2": 1.05
+  },
+  "display_rarity": "COMMON",
+  "domain": "tool",
+  "downgrade_ingredient": {
+    "item": "minecraft:stick"
+  },
+  "experience_required": 0,
+  "generated_downgrade_template": true,
+  "generated_upgrade_template": true,
+  "id": "tieredechoes:common",
+  "schema_version": 1,
+  "sort_order": 0,
+  "upgrade_ingredient": {
+    "item": "minecraft:cobblestone"
+  }
+}

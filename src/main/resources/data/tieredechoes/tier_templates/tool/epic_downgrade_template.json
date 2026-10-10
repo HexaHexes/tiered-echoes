@@ -1,8 +1,0 @@
-{
-  "schema_version": 1,
-  "id": "tieredechoes:epic_tool_downgrade_template",
-  "tier": "tieredechoes:epic",
-  "domain": "tool",
-  "kind": "downgrade",
-  "item": "tieredechoes:epic_downgrade_template"
-}

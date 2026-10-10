@@ -7,10 +7,10 @@ import net.minecraftforge.registries.ForgeRegistries;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.registry.TEItems;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
-import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -24,7 +24,7 @@ import java.util.Optional;
 public final class TemplateService {
 	private static final TemplateService INSTANCE = new TemplateService();
 
-	/** (domain, tier, downgrade) -> declaration. */
+	/** (tier, downgrade) -> declaration. */
 	private final Map<TemplateKey, TemplateDefinition> declared = new LinkedHashMap<>();
 
 	private TemplateService() {
@@ -37,12 +37,20 @@ public final class TemplateService {
 	public synchronized void replaceAll(final Collection<TemplateDefinition> definitions) {
 		this.declared.clear();
 		for (final TemplateDefinition definition : definitions) {
-			this.declared.put(new TemplateKey(definition.domain(), definition.tier(), definition.downgrade()), definition);
+			this.declared.put(new TemplateKey(definition.tier(), definition.downgrade()), definition);
 		}
 	}
 
 	public synchronized Optional<TemplateDefinition> template(final TierDefinition tier, final boolean downgrade) {
-		return Optional.ofNullable(this.declared.get(new TemplateKey(tier.domain(), tier.id(), downgrade)));
+		return Optional.ofNullable(this.declared.get(new TemplateKey(tier.id(), downgrade)));
+	}
+
+	/**
+	 * Every declaration currently in force, in insertion order. Exposed so tooling — and the tests
+	 * that pin the one-template-per-tier contract — can see what a datapack actually contributed.
+	 */
+	public synchronized List<TemplateDefinition> declaredTemplates() {
+		return List.copyOf(this.declared.values());
 	}
 
 	/**
@@ -67,6 +75,6 @@ public final class TemplateService {
 		return new ResourceLocation(TieredEchoes.MOD_ID, tier.id().getPath().toLowerCase(Locale.ROOT) + (downgrade ? "_downgrade_template" : "_upgrade_template"));
 	}
 
-	private record TemplateKey(TierDomain domain, ResourceLocation tier, boolean downgrade) {
+	private record TemplateKey(ResourceLocation tier, boolean downgrade) {
 	}
 }

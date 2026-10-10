@@ -1,0 +1,7 @@
+{
+  "id": "tieredechoes:uncommon_downgrade_template",
+  "item": "tieredechoes:uncommon_downgrade_template",
+  "kind": "downgrade",
+  "schema_version": 1,
+  "tier": "tieredechoes:uncommon"
+}

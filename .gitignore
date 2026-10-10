@@ -21,12 +21,16 @@ build
 eclipse
 run
 run-data
-src/generated
 
 # Minecraft drops these wherever it is launched from, including nested mod folders.
 logs
 crash-reports
 screenshots
+
+# src/generated is deliberately NOT ignored: it holds the committed datagen output
+# (runData), which has to ship in the jar. ShippedLadderTest fails if it goes stale.
+src/generated/resources/.cache
+src/generated/resources/.cache
 
 # Files from Forge MDK
 forge*changelog.txt

@@ -1,8 +1,0 @@
-{
-  "schema_version": 1,
-  "id": "tieredechoes:uncommon_accessory_downgrade_template",
-  "tier": "tieredechoes:uncommon",
-  "domain": "accessory",
-  "kind": "downgrade",
-  "item": "tieredechoes:uncommon_downgrade_template"
-}

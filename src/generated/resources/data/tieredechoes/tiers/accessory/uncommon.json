@@ -1,0 +1,35 @@
+{
+  "attribute_multipliers": {
+    "armor": 1.12,
+    "armor_toughness": 1.1,
+    "attack_damage": 1.12,
+    "attack_speed": 1.04,
+    "cold_resistance": 1.12,
+    "durability": 1.1,
+    "heat_resistance": 1.12,
+    "knockback_resistance": 1.08,
+    "mana_regen": 1.08,
+    "max_mana": 1.12,
+    "thermal_resistance": 1.12
+  },
+  "compat_amplifiers": {},
+  "curios_set_bonuses": {
+    "*2": 1.07,
+    "*3": 1.1
+  },
+  "display_rarity": "UNCOMMON",
+  "domain": "accessory",
+  "downgrade_ingredient": {
+    "item": "minecraft:gold_ingot"
+  },
+  "experience_required": 25,
+  "generated_downgrade_template": true,
+  "generated_upgrade_template": true,
+  "id": "tieredechoes:uncommon",
+  "previous_tier": "tieredechoes:common",
+  "schema_version": 1,
+  "sort_order": 1,
+  "upgrade_ingredient": {
+    "item": "minecraft:emerald"
+  }
+}

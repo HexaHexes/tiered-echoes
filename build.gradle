@@ -54,6 +54,21 @@ minecraft {
             property 'forge.enabledGameTestNamespaces', mod_id
             arg '-mixin.config=tieredechoes.mixins.json'
         }
+
+        // Regenerates the built-in datapack into src/generated/resources, which is committed and
+        // wired into the jar as an extra resources srcDir. Intentionally not part of 'build': the
+        // drift test is what catches a stale commit, rather than booting the registry on every
+        // build.
+        //
+        // The output must NOT be src/main/resources. A Forge data run owns its output directory and
+        // wipes whatever it did not just generate, which would delete the hand-authored tags,
+        // GameTest structures, assets and mods.toml on every run.
+        data {
+            workingDirectory project.file('run-data')
+            args '--mod', mod_id, '--all',
+                 '--output', file('src/generated/resources'),
+                 '--existing', file('src/main/resources')
+        }
     }
 }
 
@@ -110,6 +125,10 @@ dependencies {
     runtimeOnly(fg.deobf("curse.maven:ars-nouveau-401955:6688854"))
     runtimeOnly(fg.deobf("curse.maven:curios-309927:6418456"))
     runtimeOnly(fg.deobf("curse.maven:legendary-survival-overhaul-840254:7603852"))
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 mixin {
@@ -118,6 +137,20 @@ mixin {
     debug.export = true
     debug.verbose = true
 }
+
+// MixinGradle appends the mixin config to every run, including the data run. Datagen never applies
+// a mixin, and in a data launch the config resource is not readable that early, so the arg has to
+// be stripped again. This has to wait until afterEvaluate: the mixin block above adds it, and a
+// plain data{} block would run before that and get the arg re-added.
+afterEvaluate {
+    def dataRun = minecraft.runs.getByName('data')
+    dataRun.args.removeAll { it == '-mixin.config' || it == '--mixin.config' || it == 'tieredechoes.mixins.json' }
+}
+
+// The committed datagen output ships in the jar alongside src/main/resources. The two directories
+// deliberately do not overlap: datagen owns data/tieredechoes/{tiers, tier_paths, tier_templates,
+// recipes/templates}, and everything else is hand-authored.
+sourceSets.main.resources.srcDir 'src/generated/resources'
 
 tasks.named('processResources', ProcessResources).configure {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
@@ -172,4 +205,13 @@ publishing {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+    }
 }
