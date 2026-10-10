@@ -1,18 +1,30 @@
 name: Publish to CurseForge
 
 # Deliberately separate from release.yml. A CurseForge outage fails only this
-# workflow and never the GitHub release, and the tag name already carries the
-# channel so this needs no hand-off from the release job.
+# workflow and never the GitHub release.
+#
+# The release: published trigger is NOT sufficient on its own. GitHub refuses
+# to cascade workflow runs started by the default GITHUB_TOKEN, and release.yml
+# is the only thing that creates releases - so a release published by that
+# token would never start this workflow. workflow_dispatch is explicitly exempt
+# from that rule, so release.yml dispatches this directly after tagging.
+# The release trigger is kept for releases created by hand.
 on:
   release:
     types:
       - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish'
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: curseforge-${{ github.event.release.tag_name }}
+  group: curseforge-${{ github.event.release.tag_name || inputs.tag }}
   cancel-in-progress: false
 
 jobs:
@@ -25,6 +37,9 @@ jobs:
     env:
       MINECRAFT_VERSION: '1.20.1'
       MOD_LOADERS: '["Forge"]'
+      GH_TOKEN: ${{ github.token }}
+      # Either the release event or the dispatch input, never both.
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
 
     steps:
       - name: Resolve channel from the tag
@@ -32,13 +47,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          TAG="${{ github.event.release.tag_name }}"
-          echo "tag: $TAG"
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "::error::No release tag supplied. Expected one from the release event or the dispatch input."
+            exit 1
+          fi
+          echo "tag: $RELEASE_TAG"
 
           # Alphas are GitHub-only by decision. They are rolling builds of main
           # and publishing them would bury the channel users actually browse.
           # No pre-release suffix at all means a clean bump, which is stable.
-          case "$TAG" in
+          case "$RELEASE_TAG" in
             *+g*)
               echo "channel=alpha"
               echo "publish=false"
@@ -59,7 +77,7 @@ jobs:
       - name: Skip alphas
         if: steps.channel.outputs.publish != 'true'
         run: |
-          echo "Skipping CurseForge upload."
+          echo "Skipping CurseForge upload for $RELEASE_TAG."
           echo "${{ steps.channel.outputs.reason }}."
 
       - name: Fail if secrets are missing
@@ -86,18 +104,23 @@ jobs:
 
           echo "Secrets present."
 
-      - name: Download release asset
+      # Both the asset and the notes are read back from the published release
+      # rather than taken from the event payload, so this works identically
+      # whether it was triggered by the release event or by a dispatch.
+      - name: Download release asset and notes
         if: steps.channel.outputs.publish == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p staged
-          gh release download "${{ github.event.release.tag_name }}" \
+          gh release download "$RELEASE_TAG" \
             --pattern 'tieredechoes-*.jar' \
             --dir staged
           ls -la staged
           echo "ASSET=$(ls staged/tieredechoes-*.jar | head -1)" >> "$GITHUB_ENV"
+
+          gh release view "$RELEASE_TAG" --json body --jq '.body' > notes.md
+          echo "Release notes ($(wc -c < notes.md) bytes):"
+          cat notes.md
 
       - name: Upload to CurseForge
         if: steps.channel.outputs.publish == 'true'
@@ -116,18 +139,13 @@ jobs:
             *)      RELEASE_TYPE=3 ;;
           esac
 
-          CHANGELOG_FILE=$(mktemp)
-          cat > "$CHANGELOG_FILE" <<EOF
-          ${{ github.event.release.body }}
-          EOF
-
           # gameVersions carries both the Minecraft version and the loader name;
           # the API resolves loaders as game versions of the Mod Loader type.
           # A mismatch here is rejected outright, not silently accepted, so the
           # declared versions must match what the project is listed for.
           METADATA=$(jq -n \
-            --arg changelog "$(cat "$CHANGELOG_FILE")" \
-            --arg displayName "${{ github.event.release.tag_name }}" \
+            --rawfile changelog notes.md \
+            --arg displayName "$RELEASE_TAG" \
             --arg gameVersion "$MINECRAFT_VERSION" \
             --argjson loaders "$MOD_LOADERS" \
             --argjson releaseType "$RELEASE_TYPE" \
