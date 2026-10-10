@@ -37,7 +37,10 @@ public final class TierService implements ITierService {
     private final Map<TierKey, TierDefinition> tiersByKey = new LinkedHashMap<>();
 
     private TierService() {
-        this.replaceAll(this.builtinDefaults());
+        // Empty until the first datapack reload. What ships inside the jar is the generated
+        // datapack, not a Java table; keeping a second copy here would mean a datapack could
+        // never actually remove a tier, because the fallback would put it straight back.
+        this.replaceAll(List.of());
     }
 
     public static TierService getInstance() {
@@ -489,70 +492,5 @@ public final class TierService implements ITierService {
             }
             default -> 100;
         };
-    }
-
-    /**
-     * The built-in tier ladder. The datapack reloader seeds from this list rather than from the
-     * currently applied state, so removing a datapack tier actually removes it on the next reload
-     * instead of being carried forward forever.
-     */
-    public synchronized List<TierDefinition> builtinDefaults() {
-        final List<TierDefinition> defaults = new ArrayList<>();
-        int schema = 1;
-        for (final TierDomain domain : TierDomain.builtinDomains()) {
-            defaults.add(new TierDefinition(new ResourceLocation("tieredechoes", "common"), domain, schema, Rarity.COMMON, 0, 0, new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", domain == TierDomain.ACCESSORY ? "gold_ingot" : "cobblestone")), Optional.of(new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", "stick"))), Optional.empty(), Optional.of("builtin"), Map.ofEntries(
-                    Map.entry("durability", 1.0D),
-                    Map.entry("attack_damage", 1.0D),
-                    Map.entry("attack_speed", 1.0D),
-                    Map.entry("armor", 1.0D),
-                    Map.entry("armor_toughness", 1.0D),
-                    Map.entry("knockback_resistance", 1.0D),
-                    Map.entry("max_mana", 1.0D),
-                    Map.entry("mana_regen", 1.0D),
-                    Map.entry("cold_resistance", 1.0D),
-                    Map.entry("heat_resistance", 1.0D),
-                    Map.entry("thermal_resistance", 1.0D)
-            ), Map.of("*2", 1.05D), Map.of(), true, true));
-            defaults.add(new TierDefinition(new ResourceLocation("tieredechoes", "uncommon"), domain, schema, Rarity.UNCOMMON, 1, 25, new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", domain == TierDomain.ACCESSORY ? "emerald" : "iron_ingot")), Optional.of(new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", domain == TierDomain.ACCESSORY ? "gold_ingot" : "cobblestone"))), Optional.of(new ResourceLocation("tieredechoes", "common")), Optional.of("builtin"), Map.ofEntries(
-                    Map.entry("durability", 1.1D),
-                    Map.entry("attack_damage", 1.12D),
-                    Map.entry("attack_speed", 1.04D),
-                    Map.entry("armor", 1.12D),
-                    Map.entry("armor_toughness", 1.1D),
-                    Map.entry("knockback_resistance", 1.08D),
-                    Map.entry("max_mana", 1.12D),
-                    Map.entry("mana_regen", 1.08D),
-                    Map.entry("cold_resistance", 1.12D),
-                    Map.entry("heat_resistance", 1.12D),
-                    Map.entry("thermal_resistance", 1.12D)
-            ), Map.of("*2", 1.07D, "*3", 1.1D), Map.of(), true, true));
-            defaults.add(new TierDefinition(new ResourceLocation("tieredechoes", "rare"), domain, schema, Rarity.RARE, 2, 75, new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", "diamond")), Optional.of(new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", domain == TierDomain.ACCESSORY ? "emerald" : "iron_ingot"))), Optional.of(new ResourceLocation("tieredechoes", "uncommon")), Optional.of("builtin"), Map.ofEntries(
-                    Map.entry("durability", 1.2D),
-                    Map.entry("attack_damage", 1.25D),
-                    Map.entry("attack_speed", 1.08D),
-                    Map.entry("armor", 1.25D),
-                    Map.entry("armor_toughness", 1.2D),
-                    Map.entry("knockback_resistance", 1.15D),
-                    Map.entry("max_mana", 1.25D),
-                    Map.entry("mana_regen", 1.15D),
-                    Map.entry("cold_resistance", 1.25D),
-                    Map.entry("heat_resistance", 1.25D),
-                    Map.entry("thermal_resistance", 1.25D)
-            ), Map.of("*2", 1.1D, "*3", 1.15D, "*4", 1.2D), Map.of(), true, true));
-            defaults.add(new TierDefinition(new ResourceLocation("tieredechoes", "epic"), domain, schema, Rarity.EPIC, 3, 150, new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", domain == TierDomain.ACCESSORY ? "nether_star" : "netherite_ingot")), Optional.of(new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", "diamond"))), Optional.of(new ResourceLocation("tieredechoes", "rare")), Optional.of("builtin"), Map.ofEntries(
-                    Map.entry("durability", 1.35D),
-                    Map.entry("attack_damage", 1.4D),
-                    Map.entry("attack_speed", 1.12D),
-                    Map.entry("armor", 1.4D),
-                    Map.entry("armor_toughness", 1.35D),
-                    Map.entry("knockback_resistance", 1.25D),
-                    Map.entry("max_mana", 1.4D),
-                    Map.entry("mana_regen", 1.25D),
-                    Map.entry("cold_resistance", 1.4D),
-                    Map.entry("heat_resistance", 1.4D),
-                    Map.entry("thermal_resistance", 1.4D)
-            ), Map.of("*2", 1.12D, "*3", 1.18D, "*4", 1.24D), Map.of(), true, true));
-        }
-        return List.copyOf(defaults);
     }
 }

@@ -1,0 +1,37 @@
+{
+  "domain": "armor",
+  "edges": [
+    {
+      "attunement_ingredient": {
+        "item": "minecraft:iron_ingot"
+      },
+      "display_branch_id": "armor_common_to_uncommon",
+      "downgrade_to": "tieredechoes:common",
+      "from": "tieredechoes:common",
+      "schema_version": 1,
+      "to": "tieredechoes:uncommon"
+    },
+    {
+      "attunement_ingredient": {
+        "item": "minecraft:diamond"
+      },
+      "display_branch_id": "armor_uncommon_to_rare",
+      "downgrade_to": "tieredechoes:uncommon",
+      "from": "tieredechoes:uncommon",
+      "schema_version": 1,
+      "to": "tieredechoes:rare"
+    },
+    {
+      "attunement_ingredient": {
+        "item": "minecraft:netherite_ingot"
+      },
+      "display_branch_id": "armor_rare_to_epic",
+      "downgrade_to": "tieredechoes:rare",
+      "from": "tieredechoes:rare",
+      "schema_version": 1,
+      "to": "tieredechoes:epic"
+    }
+  ],
+  "id": "tieredechoes:armor_linear",
+  "schema_version": 1
+}

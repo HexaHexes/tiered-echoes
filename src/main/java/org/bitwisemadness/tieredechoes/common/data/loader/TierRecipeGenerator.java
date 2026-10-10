@@ -123,7 +123,7 @@ public final class TierRecipeGenerator {
             return;
         }
         out.add(new TierUpgradeRecipe(
-                recipeId(UPGRADE_PREFIX, edge),
+                recipeId(UPGRADE_PREFIX, edge.domain(), edge.from(), edge.to()),
                 template, base, addition,
                 edge.domain(), edge.from(), edge.to()));
     }
@@ -154,7 +154,7 @@ public final class TierRecipeGenerator {
             return;
         }
         out.add(new TierDowngradeRecipe(
-                recipeId(DOWNGRADE_PREFIX, edge),
+                recipeId(DOWNGRADE_PREFIX, edge.domain(), edge.to(), edge.downgradeTo().orElse(edge.from())),
                 template, base, addition,
                 edge.domain(), edge.to(), edge.downgradeTo().orElse(edge.from())));
     }
@@ -184,9 +184,18 @@ public final class TierRecipeGenerator {
         return TemplateService.getInstance().templateItem(tier, downgrade);
     }
 
-    private static ResourceLocation recipeId(final String prefix, final TierEdge edge) {
-        return new ResourceLocation(TieredEchoes.MOD_ID, prefix + edge.domain().getSerializedName()
-                + "/" + edge.from().getPath() + "_to_" + edge.to().getPath());
+    /**
+     * Names a generated recipe after the transition it performs, not after the edge that implied it.
+     *
+     * <p>An edge and its downgrade are the same story told in two directions, so deriving both ids
+     * from the edge alone would make a recipe that steps <em>down</em> from uncommon to common claim
+     * to be {@code common_to_uncommon}. Every id here is user-visible — it is what a datapack author
+     * greps for, and what {@code /recipe give} takes — so it should say what the recipe does.</p>
+     */
+    private static ResourceLocation recipeId(final String prefix, final TierDomain domain,
+                                             final ResourceLocation from, final ResourceLocation to) {
+        return new ResourceLocation(TieredEchoes.MOD_ID, prefix + domain.getSerializedName()
+                + "/" + from.getPath() + "_to_" + to.getPath());
     }
 
     /**

@@ -1,8 +1,0 @@
-{
-  "schema_version": 1,
-  "id": "tieredechoes:rare_armor_upgrade_template",
-  "tier": "tieredechoes:rare",
-  "domain": "armor",
-  "kind": "upgrade",
-  "item": "tieredechoes:rare_upgrade_template"
-}

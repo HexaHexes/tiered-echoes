@@ -1,8 +1,0 @@
-{
-  "schema_version": 1,
-  "id": "tieredechoes:common_accessory_upgrade_template",
-  "tier": "tieredechoes:common",
-  "domain": "accessory",
-  "kind": "upgrade",
-  "item": "tieredechoes:common_upgrade_template"
-}

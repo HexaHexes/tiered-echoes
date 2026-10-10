@@ -34,27 +34,14 @@ public final class PathService implements IPathService {
     private final Map<TierKey, List<TierEdge>> incomingEdges = new LinkedHashMap<>();
 
     private PathService() {
-        this.replaceAll(this.builtinEdges());
+        // Empty until the first datapack reload. The transitions that ship inside the jar are the
+        // JSON files in the generated datapack, not a second copy of them held in Java - so a
+        // datapack that drops a tier really does drop it.
+        this.replaceAll(List.of());
     }
 
     public static PathService getInstance() {
         return INSTANCE;
-    }
-
-    /**
-     * Built-in transitions, re-seeded on every reload so that removing a datapack tier also removes
-     * its edges instead of being carried forward from the previous state. The registration order is
-     * derived from the domain rather than a counter, so repeated calls produce an identical ordering.
-     */
-    public synchronized List<TierEdge> builtinEdges() {
-        final List<TierEdge> defaults = new ArrayList<>();
-        for (final TierDomain domain : TierDomain.builtinDomains()) {
-            final int base = domain.ordinal() * 16;
-            defaults.add(builtinEdge(domain, "common", "uncommon", base));
-            defaults.add(builtinEdge(domain, "uncommon", "rare", base + 1));
-            defaults.add(builtinEdge(domain, "rare", "epic", base + 2));
-        }
-        return List.copyOf(defaults);
     }
 
     public synchronized void replaceAll(final Collection<TierEdge> edges) {
@@ -230,29 +217,5 @@ public final class PathService implements IPathService {
         }
         seed = 31 * seed + stack.getItem().toString().hashCode();
         return seed;
-    }
-
-    private static TierEdge builtinEdge(final TierDomain domain, final String fromTier, final String toTier, final int registrationOrder) {
-        return new TierEdge(
-                new ResourceLocation("tieredechoes", fromTier),
-                new ResourceLocation("tieredechoes", toTier),
-                domain,
-                registrationOrder,
-                Optional.of(ingredientForTier(toTier, domain)),
-                Optional.of(new ResourceLocation("tieredechoes", fromTier)),
-                Optional.of("builtin"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(domain.getSerializedName() + "_" + fromTier + "_to_" + toTier),
-                Map.of());
-    }
-
-    private static IngredientMatcher ingredientForTier(final String tier, final TierDomain domain) {
-        return switch (tier) {
-            case "uncommon" -> new IngredientMatcher(IngredientMatcher.Kind.ITEM, domain == TierDomain.ACCESSORY ? new ResourceLocation("minecraft", "emerald") : new ResourceLocation("minecraft", "iron_ingot"));
-            case "rare" -> new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", "diamond"));
-            case "epic" -> new IngredientMatcher(IngredientMatcher.Kind.ITEM, domain == TierDomain.ACCESSORY ? new ResourceLocation("minecraft", "nether_star") : new ResourceLocation("minecraft", "netherite_ingot"));
-            default -> new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", "cobblestone"));
-        };
     }
 }
