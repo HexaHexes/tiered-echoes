@@ -24,19 +24,30 @@ five commits still lands as a single commit. Write the PR title as a
 sentence-case imperative, because the squash commit's subject line is taken
 from it.
 
-`main` is protected, and the rules are enforced by GitHub rather than by
-agreement, so they hold for maintainers too:
+`main` is protected by rulesets, so these rules are enforced by GitHub rather
+than by agreement:
 
-- **One approving review from someone with write access** before merge.
-  Admins are not exempt.
+- **Everything lands through a PR.** No direct pushes, no force-pushes, and
+  `main` cannot be deleted. This holds for maintainers too.
+- **All three CI checks must be green** — `junit`, `gametest`, `version-bump`.
 - **Squash only.** Merge commits and rebases are disabled, so the one-PR-one-
   commit rule above cannot be broken by picking the wrong button.
-- **No force-push, no deleting `main`.**
 - **Head branch is deleted automatically** once the PR merges.
+- **PRs from contributors without write access need one approving review**,
+  from anyone with write access.
 
-A green build is not approval. The suite proves the code does what it says;
-it cannot prove the code says the right thing, so that is what the review is
-for.
+That last rule has a deliberate exception worth understanding before it
+surprises you. Maintainers are on the ruleset's **bypass list**, so they may
+merge their own PRs without waiting for approval. GitHub does not make this
+look calm: the PR still shows red and reads `REVIEW_REQUIRED`, because GitHub
+refuses to treat an author as their own reviewer even when a rule is
+explicitly bypassed. Merging takes the deliberate "merge without waiting for
+requirements to be met" action. The red is expected, not a sign that
+something is broken.
+
+The exception covers *who* may merge, never *what* passes. CI is a separate
+ruleset with no bypass list, so it gates every PR identically — a maintainer's
+own PR included.
 
 Before pushing, run both checks locally. CI is the gate, and a red PR costs a
 round trip:
