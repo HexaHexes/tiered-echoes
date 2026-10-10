@@ -33,6 +33,7 @@ public abstract class AbstractGeneratedPackProvider implements DataProvider {
         futures.add(this.writeDefaultTierSet(cachedOutput, root));
         futures.add(this.writeDefaultPathSet(cachedOutput, root));
         futures.add(this.writeTemplateSet(cachedOutput, root));
+        futures.add(this.writeTemplateItemModelSet(cachedOutput, root));
         futures.add(this.writeRecipeSet(cachedOutput, root));
         return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
     }
@@ -89,27 +90,66 @@ public abstract class AbstractGeneratedPackProvider implements DataProvider {
         return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
     }
 
+    private CompletableFuture<?> writeTemplateItemModelSet(final CachedOutput cachedOutput, final Path root) {
+        final List<CompletableFuture<?>> futures = new ArrayList<>();
+        for (final String tier : new String[] {"common", "uncommon", "rare", "epic"}) {
+            futures.add(DataProvider.saveStable(cachedOutput, fallbackUpgradeTemplateModel(), root.resolve(this.packId + "/assets/tieredechoes/models/item/" + tier + "_upgrade_template.json")));
+            futures.add(DataProvider.saveStable(cachedOutput, fallbackDowngradeTemplateModel(), root.resolve(this.packId + "/assets/tieredechoes/models/item/" + tier + "_downgrade_template.json")));
+        }
+        return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
+    }
+
+    private JsonObject fallbackUpgradeTemplateModel() {
+        final JsonObject json = new JsonObject();
+        json.addProperty("parent", "minecraft:item/netherite_upgrade_smithing_template");
+        return json;
+    }
+
+    private JsonObject fallbackDowngradeTemplateModel() {
+        final JsonObject json = new JsonObject();
+        json.addProperty("parent", "minecraft:item/generated");
+        final JsonObject textures = new JsonObject();
+        textures.addProperty("layer0", "tieredechoes:item/downgrade_template");
+        json.add("textures", textures);
+        return json;
+    }
+
     private CompletableFuture<?> writeRecipeSet(final CachedOutput cachedOutput, final Path root) {
         final List<CompletableFuture<?>> futures = new ArrayList<>();
         for (final String domain : this.defaultDomains()) {
             for (final String tier : new String[] {"uncommon", "rare", "epic"}) {
-                final JsonObject recipe = new JsonObject();
-                recipe.addProperty("type", "tieredechoes:upgrade_placeholder");
-                recipe.addProperty("schema_version", 1);
-                recipe.addProperty("tier", "tieredechoes:" + tier);
-                recipe.addProperty("domain", domain);
-                recipe.addProperty("disabled_by_xp_only", false);
-                futures.add(DataProvider.saveStable(cachedOutput, recipe, root.resolve(this.packId + "/data/" + this.packId + "/recipes/" + domain + "/" + tier + "_upgrade.json")));
-
-                final JsonObject downgradeRecipe = new JsonObject();
-                downgradeRecipe.addProperty("type", "tieredechoes:downgrade_placeholder");
-                downgradeRecipe.addProperty("schema_version", 1);
-                downgradeRecipe.addProperty("tier", "tieredechoes:" + tier);
-                downgradeRecipe.addProperty("domain", domain);
-                futures.add(DataProvider.saveStable(cachedOutput, downgradeRecipe, root.resolve(this.packId + "/data/" + this.packId + "/recipes/" + domain + "/" + tier + "_downgrade.json")));
+                final String ingredient = tier.equals("uncommon") ? (domain.equals("accessory") ? "minecraft:emerald" : "minecraft:iron_ingot") : tier.equals("rare") ? "minecraft:diamond" : (domain.equals("accessory") ? "minecraft:nether_star" : "minecraft:netherite_ingot");
+                futures.add(DataProvider.saveStable(cachedOutput, templateCopyRecipe("tieredechoes:" + tier + "_upgrade_template", ingredient), root.resolve(this.packId + "/data/" + this.packId + "/recipes/" + domain + "/" + tier + "_upgrade_template_copy.json")));
+                futures.add(DataProvider.saveStable(cachedOutput, templateCopyRecipe("tieredechoes:" + tier + "_downgrade_template", ingredient), root.resolve(this.packId + "/data/" + this.packId + "/recipes/" + domain + "/" + tier + "_downgrade_template_copy.json")));
             }
         }
         return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
+    }
+
+    private JsonObject templateCopyRecipe(final String templateItem, final String ingredientItem) {
+        final JsonObject recipe = new JsonObject();
+        recipe.addProperty("type", "minecraft:crafting_shaped");
+        final JsonArray pattern = new JsonArray();
+        pattern.add("#S#");
+        pattern.add("#C#");
+        pattern.add("###");
+        recipe.add("pattern", pattern);
+        final JsonObject key = new JsonObject();
+        final JsonObject diamond = new JsonObject();
+        diamond.addProperty("item", "minecraft:diamond");
+        key.add("#", diamond);
+        final JsonObject template = new JsonObject();
+        template.addProperty("item", templateItem);
+        key.add("S", template);
+        final JsonObject ingredient = new JsonObject();
+        ingredient.addProperty("item", ingredientItem);
+        key.add("C", ingredient);
+        recipe.add("key", key);
+        final JsonObject result = new JsonObject();
+        result.addProperty("item", templateItem);
+        result.addProperty("count", 2);
+        recipe.add("result", result);
+        return recipe;
     }
 
     private CompletableFuture<?> writeTier(final CachedOutput cachedOutput, final Path root, final String domain, final String tierId, final Rarity rarity, final int sortOrder, final int xp, final String ingredient, final String previousTier) {

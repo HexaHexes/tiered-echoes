@@ -1,0 +1,161 @@
+name: Publish to CurseForge
+
+# Deliberately separate from release.yml. A CurseForge outage fails only this
+# workflow and never the GitHub release, and the tag name already carries the
+# channel so this needs no hand-off from the release job.
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+concurrency:
+  group: curseforge-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: upload-file
+    runs-on: ubuntu-latest
+
+    # Edit these two lines when multi-loader support lands. Everything else
+    # reads from here, so adding a loader is not a hunt through YAML.
+    env:
+      MINECRAFT_VERSION: '1.20.1'
+      MOD_LOADERS: '["Forge"]'
+
+    steps:
+      - name: Resolve channel from the tag
+        id: channel
+        run: |
+          set -euo pipefail
+
+          TAG="${{ github.event.release.tag_name }}"
+          echo "tag: $TAG"
+
+          # Alphas are GitHub-only by decision. They are rolling builds of main
+          # and publishing them would bury the channel users actually browse.
+          # No pre-release suffix at all means a clean bump, which is stable.
+          case "$TAG" in
+            *+g*)
+              echo "channel=alpha"
+              echo "publish=false"
+              echo "reason=alphas are published to GitHub only, not CurseForge"
+              ;;
+            *-*)
+              echo "channel=beta"
+              echo "publish=true"
+              echo "reason=tag carries a pre-release suffix"
+              ;;
+            *)
+              echo "channel=stable"
+              echo "publish=true"
+              echo "reason=clean version tag"
+              ;;
+          esac
+
+      - name: Skip alphas
+        if: steps.channel.outputs.publish != 'true'
+        run: |
+          echo "Skipping CurseForge upload."
+          echo "${{ steps.channel.outputs.reason }}."
+
+      - name: Fail if secrets are missing
+        if: steps.channel.outputs.publish == 'true'
+        env:
+          CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          # Fail loudly rather than skip. A silent skip here would mean a
+          # release users were promised simply never appears, with nothing in
+          # the logs to explain why.
+          MISSING=""
+          [ -z "$CURSEFORGE_PROJECT_ID" ] && MISSING="$MISSING CURSEFORGE_PROJECT_ID"
+          [ -z "$CURSEFORGE_API_KEY" ] && MISSING="$MISSING CURSEFORGE_API_KEY"
+
+          if [ -n "$MISSING" ]; then
+            echo "::error::Cannot publish a ${{ steps.channel.outputs.channel }} release to CurseForge."
+            echo "::error::Missing required secret(s):$MISSING"
+            echo "::error::Add them under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+          echo "Secrets present."
+
+      - name: Download release asset
+        if: steps.channel.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p staged
+          gh release download "${{ github.event.release.tag_name }}" \
+            --pattern 'tieredechoes-*.jar' \
+            --dir staged
+          ls -la staged
+          echo "ASSET=$(ls staged/tieredechoes-*.jar | head -1)" >> "$GITHUB_ENV"
+
+      - name: Upload to CurseForge
+        if: steps.channel.outputs.publish == 'true'
+        env:
+          CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+          CHANNEL: ${{ steps.channel.outputs.channel }}
+        run: |
+          set -euo pipefail
+
+          # Map the channel onto CurseForge's three-valued release type:
+          # 1 = release, 2 = beta, 3 = alpha.
+          case "$CHANNEL" in
+            stable) RELEASE_TYPE=1 ;;
+            beta)   RELEASE_TYPE=2 ;;
+            *)      RELEASE_TYPE=3 ;;
+          esac
+
+          CHANGELOG_FILE=$(mktemp)
+          cat > "$CHANGELOG_FILE" <<EOF
+          ${{ github.event.release.body }}
+          EOF
+
+          # gameVersions carries both the Minecraft version and the loader name;
+          # the API resolves loaders as game versions of the Mod Loader type.
+          # A mismatch here is rejected outright, not silently accepted, so the
+          # declared versions must match what the project is listed for.
+          METADATA=$(jq -n \
+            --arg changelog "$(cat "$CHANGELOG_FILE")" \
+            --arg displayName "${{ github.event.release.tag_name }}" \
+            --arg gameVersion "$MINECRAFT_VERSION" \
+            --argjson loaders "$MOD_LOADERS" \
+            --argjson releaseType "$RELEASE_TYPE" \
+            '{
+              changelog: $changelog,
+              changelogType: 1,
+              displayName: $displayName,
+              gameVersions: ([$gameVersion] + $loaders),
+              releaseType: $releaseType
+            }')
+
+          echo "Uploading with metadata:"
+          echo "$METADATA" | jq .
+
+          RESPONSE=$(curl --silent --show-error --fail-with-body \
+            --request POST \
+            --header "x-api-key: $CURSEFORGE_API_KEY" \
+            --form "metadata=$METADATA" \
+            --form "file=@$ASSET;type=application/java-archive" \
+            "https://api.curseforge.com/v1/mods/$CURSEFORGE_PROJECT_ID/file")
+
+          echo "Upload response:"
+          echo "$RESPONSE" | jq .
+
+          ID=$(echo "$RESPONSE" | jq -r '.data.id // empty')
+          if [ -z "$ID" ]; then
+            echo "::error::CurseForge accepted the request but returned no file id."
+            exit 1
+          fi
+
+          echo "Published CurseForge file id $ID as a $CHANNEL release."

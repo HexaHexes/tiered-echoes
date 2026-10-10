@@ -5,14 +5,11 @@ import net.minecraft.world.item.Item;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 public interface ITierService {
-    Collection<Item> collectPreviewItems(TierDomain domain);
-
-    Collection<Item> collectPreviewItemsForCuriosSlot(String slotType);
+    List<Item> collectPreviewItems(TierDomain domain);
 
     List<TierDefinition> getOrderedValidTiersForItem(Item item, TierDomain domain);
 

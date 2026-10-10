@@ -12,10 +12,8 @@ import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.item.Rarity;
 import org.bitwisemadness.tieredechoes.common.compat.apotheosis.ApotheosisCompatBridge;
 import org.bitwisemadness.tieredechoes.common.compat.arsnouveau.ArsNouveauCompatBridge;
-import org.bitwisemadness.tieredechoes.common.compat.curios.CuriosCompatBridge;
 import org.bitwisemadness.tieredechoes.common.compat.ironsspells.IronsSpellsCompatBridge;
 import org.bitwisemadness.tieredechoes.common.compat.legendarysurvivaloverhaul.LegendarySurvivalOverhaulCompatBridge;
-import org.bitwisemadness.tieredechoes.common.compat.sophisticatedbackpacks.SophisticatedBackpacksCompatBridge;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReporter;
@@ -121,10 +119,8 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
             if (!switch (mod) {
                 case "apotheosis" -> ApotheosisCompatBridge.getInstance().isLoaded();
                 case "ars_nouveau" -> ArsNouveauCompatBridge.getInstance().isLoaded();
-                case "curios" -> CuriosCompatBridge.getInstance().isLoaded();
                 case "irons_spellbooks" -> IronsSpellsCompatBridge.getInstance().isLoaded();
                 case "legendarysurvivaloverhaul" -> LegendarySurvivalOverhaulCompatBridge.getInstance().isLoaded();
-                case "sophisticatedbackpacks" -> SophisticatedBackpacksCompatBridge.getInstance().isLoaded();
                 default -> net.minecraftforge.fml.ModList.get().isLoaded(mod);
             }) {
                 return false;
@@ -148,7 +144,15 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
         final Map<String, Double> compatAmplifiers = parseDoubleMap(json.getAsJsonObject("compat_amplifiers"));
         final boolean generatedUpgradeTemplate = GsonHelper.getAsBoolean(json, "generated_upgrade_template", true);
         final boolean generatedDowngradeTemplate = GsonHelper.getAsBoolean(json, "generated_downgrade_template", true);
-        return new TierDefinition(id, domain, schemaVersion, rarity, sortOrder, xp, ingredient, downgrade, previousTier, Optional.of(source.getNamespace()), attributeMultipliers, curiosSetBonuses, compatAmplifiers, generatedDowngradeTemplate, generatedUpgradeTemplate);
+        final Optional<ResourceLocation> upgradeTemplateModel = optionalResource(json, "upgrade_template_item_model");
+        final Optional<ResourceLocation> downgradeTemplateModel = optionalResource(json, "downgrade_template_item_model");
+        final Optional<ResourceLocation> upgradeTemplateTexture = optionalResource(json, "upgrade_template_texture");
+        final Optional<ResourceLocation> downgradeTemplateTexture = optionalResource(json, "downgrade_template_texture");
+        return new TierDefinition(id, domain, schemaVersion, rarity, sortOrder, xp, ingredient, downgrade, previousTier, Optional.of(source.getNamespace()), attributeMultipliers, curiosSetBonuses, compatAmplifiers, generatedDowngradeTemplate, generatedUpgradeTemplate, upgradeTemplateModel, downgradeTemplateModel, upgradeTemplateTexture, downgradeTemplateTexture);
+    }
+
+    private static Optional<ResourceLocation> optionalResource(final JsonObject json, final String key) {
+        return json.has(key) ? Optional.of(new ResourceLocation(GsonHelper.getAsString(json, key))) : Optional.empty();
     }
 
     private static TierEdge parseEdge(final JsonObject json, final int registrationOrder, final String sourcePack) {
