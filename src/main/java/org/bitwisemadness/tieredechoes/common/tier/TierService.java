@@ -1,6 +1,7 @@
 package org.bitwisemadness.tieredechoes.common.tier;
 
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.AxeItem;
@@ -33,10 +34,10 @@ import java.util.Locale;
 public final class TierService implements ITierService {
     private static final TierService INSTANCE = new TierService();
     private final Map<TierDomain, List<TierDefinition>> tiersByDomain = new EnumMap<>(TierDomain.class);
-    private final Map<ResourceLocation, TierDefinition> tiersById = new LinkedHashMap<>();
+    private final Map<TierKey, TierDefinition> tiersByKey = new LinkedHashMap<>();
 
     private TierService() {
-        this.bootstrapDefaults();
+        this.replaceAll(this.builtinDefaults());
     }
 
     public static TierService getInstance() {
@@ -45,10 +46,9 @@ public final class TierService implements ITierService {
 
     public synchronized void replaceAll(final Collection<TierDefinition> definitions) {
         this.tiersByDomain.clear();
-        this.tiersById.clear();
+        this.tiersByKey.clear();
         for (final TierDefinition definition : definitions) {
-            this.tiersById.put(new ResourceLocation(definition.domain().getSerializedName(), definition.id().getPath()), definition);
-            this.tiersById.put(definition.id(), definition);
+            this.tiersByKey.put(TierKey.of(definition), definition);
             this.tiersByDomain.computeIfAbsent(definition.domain(), key -> new ArrayList<>()).add(definition);
         }
         for (final List<TierDefinition> values : this.tiersByDomain.values()) {
@@ -80,13 +80,41 @@ public final class TierService implements ITierService {
         return List.copyOf(this.tiersByDomain.getOrDefault(domain, List.of()));
     }
 
+    /**
+     * Domain-scoped lookup. This is the only correct way to resolve a tier id, because tier ids are
+     * shared across domains.
+     */
+    public synchronized Optional<TierDefinition> getTier(final ResourceLocation tierId, final TierDomain domain) {
+        if (tierId == null || domain == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(this.tiersByKey.get(new TierKey(domain, tierId)));
+    }
+
+    /**
+     * Unscoped lookup kept for API compatibility. Ambiguous whenever more than one domain declares
+     * the id, so it returns empty in that case rather than an arbitrary winner.
+     */
     @Override
     public synchronized Optional<TierDefinition> getTier(final ResourceLocation tierId) {
-        return Optional.ofNullable(this.tiersById.get(tierId));
+        if (tierId == null) {
+            return Optional.empty();
+        }
+        TierDefinition found = null;
+        for (final TierDefinition definition : this.tiersByKey.values()) {
+            if (!definition.id().equals(tierId)) {
+                continue;
+            }
+            if (found != null) {
+                return Optional.empty();
+            }
+            found = definition;
+        }
+        return Optional.ofNullable(found);
     }
 
     public synchronized Optional<TierDefinition> getInitialTierForItem(final Item item, final TierDomain preferredDomain) {
-        if (!this.inferDomains(item).contains(preferredDomain)) {
+        if (preferredDomain == null || !this.inferDomains(item).contains(preferredDomain)) {
             return Optional.empty();
         }
         final List<TierDefinition> tiers = this.tiersByDomain.getOrDefault(preferredDomain, List.of());
@@ -95,7 +123,7 @@ public final class TierService implements ITierService {
 
     public synchronized Optional<TierDefinition> getPreviousTier(final TierDefinition tier) {
         if (tier.previousTier().isPresent()) {
-            return this.getTier(tier.previousTier().get());
+            return this.getTier(tier.previousTier().get(), tier.domain());
         }
         final List<TierDefinition> ordered = this.tiersByDomain.getOrDefault(tier.domain(), List.of());
         for (int i = 0; i < ordered.size(); i++) {
@@ -319,17 +347,68 @@ public final class TierService implements ITierService {
     }
 
     public synchronized List<TierDefinition> getAllTiers() {
-        return List.copyOf(this.tiersById.values().stream().distinct().toList());
+        return List.copyOf(this.tiersByKey.values());
     }
 
     public synchronized Optional<TierDefinition> resolveCurrentTier(final ItemStack stack, final TierDomain preferredDomain) {
-        if (stack.hasTag() && stack.getTag().contains("TieredEchoes")) {
-            final var te = stack.getTag().getCompound("TieredEchoes");
-            if (te.contains("tier_id")) {
-                return this.getTier(ResourceLocation.tryParse(te.getString("tier_id")));
+        final Optional<TierDefinition> fromNbt = this.readTierFromNbt(stack, null);
+        if (fromNbt.isPresent()) {
+            return fromNbt;
+        }
+        if (stack.hasTag() && stack.getTag().contains("TieredEchoes")
+                && stack.getTag().getCompound("TieredEchoes").contains("tier_id")) {
+            // The id is recorded but no domain resolves it: the datapack that defined it is gone.
+            return Optional.empty();
+        }
+        final TierDomain domain = preferredDomain != null
+                ? preferredDomain
+                : this.inferDomains(stack.getItem()).stream().findFirst().orElse(null);
+        if (domain == null) {
+            return Optional.empty();
+        }
+        return this.getInitialTierForItem(stack.getItem(), domain);
+    }
+
+    /**
+     * Reads {@code tier_id} together with the {@code tier_domain} recorded alongside it. Falls back to
+     * inferring the domain from the item when the tag predates domain bookkeeping.
+     */
+    public synchronized Optional<TierDefinition> readTierFromNbt(final ItemStack stack, final TierDomain preferredDomain) {
+        if (stack.isEmpty() || !stack.hasTag() || !stack.getTag().contains("TieredEchoes")) {
+            return Optional.empty();
+        }
+        final CompoundTag te = stack.getTag().getCompound("TieredEchoes");
+        if (!te.contains("tier_id")) {
+            return Optional.empty();
+        }
+        final ResourceLocation tierId = ResourceLocation.tryParse(te.getString("tier_id"));
+        if (tierId == null) {
+            return Optional.empty();
+        }
+        if (te.contains("tier_domain")) {
+            try {
+                final TierDomain stored = TierDomain.valueOf(te.getString("tier_domain").toUpperCase(Locale.ROOT));
+                final Optional<TierDefinition> scoped = this.getTier(tierId, stored);
+                if (scoped.isPresent()) {
+                    return scoped;
+                }
+            } catch (final IllegalArgumentException ignored) {
+                // Unknown domain written by a newer pack; fall through to inference.
             }
         }
-        return this.getInitialTierForItem(stack.getItem(), preferredDomain);
+        if (preferredDomain != null) {
+            final Optional<TierDefinition> preferred = this.getTier(tierId, preferredDomain);
+            if (preferred.isPresent()) {
+                return preferred;
+            }
+        }
+        for (final TierDomain domain : this.inferDomains(stack.getItem())) {
+            final Optional<TierDefinition> inferred = this.getTier(tierId, domain);
+            if (inferred.isPresent()) {
+                return inferred;
+            }
+        }
+        return Optional.empty();
     }
 
     private List<Item> registeredItemsFor(final TierDomain domain) {
@@ -412,10 +491,15 @@ public final class TierService implements ITierService {
         };
     }
 
-    private void bootstrapDefaults() {
+    /**
+     * The built-in tier ladder. The datapack reloader seeds from this list rather than from the
+     * currently applied state, so removing a datapack tier actually removes it on the next reload
+     * instead of being carried forward forever.
+     */
+    public synchronized List<TierDefinition> builtinDefaults() {
         final List<TierDefinition> defaults = new ArrayList<>();
         int schema = 1;
-        for (final TierDomain domain : java.util.List.of(TierDomain.WEAPON, TierDomain.TOOL, TierDomain.ARMOR, TierDomain.ACCESSORY)) {
+        for (final TierDomain domain : TierDomain.builtinDomains()) {
             defaults.add(new TierDefinition(new ResourceLocation("tieredechoes", "common"), domain, schema, Rarity.COMMON, 0, 0, new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", domain == TierDomain.ACCESSORY ? "gold_ingot" : "cobblestone")), Optional.of(new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", "stick"))), Optional.empty(), Optional.of("builtin"), Map.ofEntries(
                     Map.entry("durability", 1.0D),
                     Map.entry("attack_damage", 1.0D),
@@ -469,6 +553,6 @@ public final class TierService implements ITierService {
                     Map.entry("thermal_resistance", 1.4D)
             ), Map.of("*2", 1.12D, "*3", 1.18D, "*4", 1.24D), Map.of(), true, true));
         }
-        this.replaceAll(defaults);
+        return List.copyOf(defaults);
     }
 }

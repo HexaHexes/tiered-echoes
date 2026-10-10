@@ -5,28 +5,19 @@ import net.minecraftforge.common.ForgeConfigSpec;
 public final class TieredEchoesConfig {
     private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
 
-    public static final ForgeConfigSpec.BooleanValue ENABLE_DOMAIN_TABS = BUILDER
-            .comment("Whether Tiered Echoes should expose one creative tab per supported domain.")
-            .define("creative_tabs.enable_domain_tabs", true);
-
-    public static final ForgeConfigSpec.BooleanValue ENABLE_CURIOS_TABS = BUILDER
-            .comment("Whether Tiered Echoes should expose dynamic Curios slot tabs when Curios integration is present.")
-            .define("creative_tabs.enable_curios_tabs", true);
-
     public static final ForgeConfigSpec.BooleanValue ENABLE_ITEM_XP = BUILDER
-            .comment("Whether the optional item experience system is enabled globally.")
-            .define("item_xp.enabled", false);
+            .comment("Whether the optional item experience system is enabled globally.",
+                    "This is the operator's master switch; which routes progression takes is decided by tier_policies.")
+            .define("item_xp.enabled", true);
 
     public static final ForgeConfigSpec.BooleanValue ENABLE_AUTO_UPGRADE_SINGLE_PATH = BUILDER
-            .comment("Whether XP-enabled items should upgrade automatically when only one valid next path exists.")
-            .define("item_xp.auto_upgrade_single_path", false);
-
-    public static final ForgeConfigSpec.BooleanValue ENABLE_ITEM_XP_ONLY_MODE = BUILDER
-            .comment("Disables upgrade-recipe-style progression and relies on experience-driven auto-upgrading.")
-            .define("item_xp.xp_only_mode", false);
+            .comment("Whether XP-enabled items should upgrade automatically when only one valid next path exists.",
+                    "Kept as a config because it is a pacing choice an operator may want to tune without a datapack.")
+            .define("item_xp.auto_upgrade_single_path", true);
 
     public static final ForgeConfigSpec.BooleanValue CONSUME_ATTUNEMENT_ITEM = BUILDER
-            .comment("Whether shift-right-click attunement consumes the offhand ingredient.")
+            .comment("Whether shift-right-click attunement consumes the offhand ingredient.",
+                    "A tier_policies file that states consume_attunement_item takes precedence over this.")
             .define("item_xp.consume_attunement_item", false);
 
     public static final ForgeConfigSpec.BooleanValue WRITE_VALIDATION_JSON = BUILDER

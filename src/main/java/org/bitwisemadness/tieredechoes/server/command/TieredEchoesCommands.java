@@ -32,8 +32,12 @@ public class TieredEchoesCommands {
                         .then(Commands.literal("hand").executes(ctx -> inspectHand(ctx.getSource()))))
                 .then(Commands.literal("validate").executes(ctx -> validate(ctx.getSource())))
                 .then(Commands.literal("preview")
-                        .then(Commands.argument("tier", net.minecraft.commands.arguments.ResourceLocationArgument.id())
-                                .executes(ctx -> preview(ctx.getSource(), net.minecraft.commands.arguments.ResourceLocationArgument.getId(ctx, "tier"))))));
+                        .then(Commands.argument("domain", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .then(Commands.argument("tier", net.minecraft.commands.arguments.ResourceLocationArgument.id())
+                                        .executes(ctx -> preview(
+                                                ctx.getSource(),
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "domain"),
+                                                net.minecraft.commands.arguments.ResourceLocationArgument.getId(ctx, "tier")))))));
     }
 
     private static int inspectHand(final CommandSourceStack source) {
@@ -51,14 +55,20 @@ public class TieredEchoesCommands {
         return 1;
     }
 
-    private static int preview(final CommandSourceStack source, final ResourceLocation tierId) {
+    private static int preview(final CommandSourceStack source, final String domainName, final ResourceLocation tierId) {
         if (source.getPlayer() == null) {
             return 0;
         }
+        final var domain = org.bitwisemadness.tieredechoes.common.tier.TierDomain.byName(domainName);
+        if (domain.isEmpty()) {
+            source.sendFailure(Component.literal("Unknown tier domain: " + domainName));
+            return 0;
+        }
         final ItemStack stack = source.getPlayer().getMainHandItem();
-        final var tier = TierService.getInstance().getTier(tierId);
+        // Scoped lookup: tier ids repeat across domains, so an unscoped resolve would be ambiguous.
+        final var tier = TierService.getInstance().getTier(tierId, domain.get());
         if (tier.isEmpty()) {
-            source.sendFailure(Component.literal("Unknown tier: " + tierId));
+            source.sendFailure(Component.literal("Unknown tier: " + tierId + " (domain " + domainName + ")"));
             return 0;
         }
         final ItemStack preview = PreviewUpgradeService.getInstance().createPreviewStack(stack, tier.get());

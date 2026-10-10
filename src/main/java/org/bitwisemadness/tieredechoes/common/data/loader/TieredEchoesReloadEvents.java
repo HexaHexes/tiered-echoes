@@ -12,6 +12,9 @@ public class TieredEchoesReloadEvents {
 
     @SubscribeEvent
     public static void onAddReloadListeners(final AddReloadListenerEvent event) {
-        event.addListener(new TieredEchoesDataReloader());
+        // Server-side only: this event is fired from ReloadableServerResources.loadResources. The
+        // RecipeManager handed over has already finished its own reload, so generated transitions can
+        // be merged into it and still reach clients via the update-recipes packet sent afterwards.
+        event.addListener(new TieredEchoesDataReloader(event.getServerResources().getRecipeManager()));
     }
 }

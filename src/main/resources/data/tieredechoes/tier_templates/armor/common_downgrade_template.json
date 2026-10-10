@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "id": "tieredechoes:common_armor_downgrade_template",
+  "tier": "tieredechoes:common",
+  "domain": "armor",
+  "kind": "downgrade",
+  "item": "tieredechoes:common_downgrade_template"
+}

@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "id": "tieredechoes:epic_weapon_downgrade_template",
+  "tier": "tieredechoes:epic",
+  "domain": "weapon",
+  "kind": "downgrade",
+  "item": "tieredechoes:epic_downgrade_template"
+}

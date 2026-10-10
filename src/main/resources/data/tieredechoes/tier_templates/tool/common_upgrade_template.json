@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "id": "tieredechoes:common_tool_upgrade_template",
+  "tier": "tieredechoes:common",
+  "domain": "tool",
+  "kind": "upgrade",
+  "item": "tieredechoes:common_upgrade_template"
+}

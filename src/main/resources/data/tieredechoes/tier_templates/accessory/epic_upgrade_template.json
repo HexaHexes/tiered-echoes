@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "id": "tieredechoes:epic_accessory_upgrade_template",
+  "tier": "tieredechoes:epic",
+  "domain": "accessory",
+  "kind": "upgrade",
+  "item": "tieredechoes:epic_upgrade_template"
+}

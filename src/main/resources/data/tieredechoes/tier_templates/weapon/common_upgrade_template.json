@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "id": "tieredechoes:common_weapon_upgrade_template",
+  "tier": "tieredechoes:common",
+  "domain": "weapon",
+  "kind": "upgrade",
+  "item": "tieredechoes:common_upgrade_template"
+}

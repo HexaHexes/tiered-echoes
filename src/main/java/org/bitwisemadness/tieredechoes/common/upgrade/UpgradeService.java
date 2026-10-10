@@ -8,8 +8,9 @@ import net.minecraft.world.item.ItemStack;
 import org.bitwisemadness.tieredechoes.api.common.IUpgradeService;
 import org.bitwisemadness.tieredechoes.common.config.TieredEchoesConfig;
 import org.bitwisemadness.tieredechoes.common.path.PathService;
-import org.bitwisemadness.tieredechoes.common.util.TierFormattingUtil;
 import org.bitwisemadness.tieredechoes.common.path.TierEdge;
+import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
+import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
@@ -33,30 +34,39 @@ public final class UpgradeService implements IUpgradeService {
     @Override
     public ItemStack applyPreviewTier(final ItemStack stack, final TierDefinition tier) {
         final ItemStack copy = stack.copy();
-        writeTierState(copy, tier, true);
+        this.writeTierState(copy, tier, true);
         return copy;
     }
 
+    /**
+     * Applies a tier while preserving stored experience, and consumes any pending branch selection —
+     * the branch belonged to the transition that was just taken.
+     */
     @Override
     public ItemStack applyTier(final ItemStack stack, final TierDefinition tier) {
         final ItemStack copy = stack.copy();
-        final int currentXp = getStoredExperience(copy);
-        writeTierState(copy, tier, false);
-        setStoredExperience(copy, currentXp);
+        final int currentXp = this.getStoredExperience(copy);
+        this.writeTierState(copy, tier, false);
+        this.setStoredExperience(copy, currentXp);
+        this.clearSelectedBranch(copy);
         return copy;
     }
 
     @Override
     public ItemStack downgrade(final ItemStack stack) {
-        final Optional<TierDefinition> current = getCurrentTier(stack);
+        final Optional<TierDefinition> current = this.getCurrentTier(stack);
         if (current.isEmpty()) {
             return stack.copy();
         }
-        final List<TierEdge> incoming = PathService.getInstance().getIncomingEdges(current.get().id());
-        final Optional<String> selectedBranch = getSelectedBranchId(stack);
+        final TierDomain domain = current.get().domain();
+        final List<TierEdge> incoming = PathService.getInstance().getIncomingEdges(current.get().id(), domain);
+        final Optional<String> selectedBranch = this.getSelectedBranchId(stack);
         TierEdge chosen = null;
         if (selectedBranch.isPresent()) {
-            chosen = incoming.stream().filter(edge -> PathService.getInstance().effectiveBranchId(edge).equals(selectedBranch.get())).min(Comparator.comparingInt(TierEdge::registrationOrder)).orElse(null);
+            chosen = incoming.stream()
+                    .filter(edge -> PathService.getInstance().effectiveBranchId(edge).equals(selectedBranch.get()))
+                    .min(Comparator.comparingInt(TierEdge::registrationOrder))
+                    .orElse(null);
         }
         if (chosen == null) {
             chosen = incoming.stream().min(Comparator.comparingInt(TierEdge::registrationOrder)).orElse(null);
@@ -64,31 +74,20 @@ public final class UpgradeService implements IUpgradeService {
         if (chosen == null) {
             return stack.copy();
         }
-        final Optional<TierDefinition> previous = TierService.getInstance().getTier(chosen.downgradeTo().orElse(chosen.from()));
+        final Optional<TierDefinition> previous = TierService.getInstance().getTier(chosen.downgradeTo().orElse(chosen.from()), domain);
         if (previous.isEmpty()) {
             return stack.copy();
         }
         final ItemStack copy = stack.copy();
-        final int xp = getStoredExperience(copy);
-        writeTierState(copy, previous.get(), false);
-        setStoredExperience(copy, xp);
-        clearSelectedBranch(copy);
+        final int xp = this.getStoredExperience(copy);
+        this.writeTierState(copy, previous.get(), false);
+        this.setStoredExperience(copy, xp);
+        this.clearSelectedBranch(copy);
         return copy;
     }
 
     public Optional<TierDefinition> getCurrentTier(final ItemStack stack) {
-        if (stack.hasTag() && stack.getTag().contains(TE_TAG)) {
-            final CompoundTag te = stack.getTag().getCompound(TE_TAG);
-            if (te.contains("tier_id")) {
-                return TierService.getInstance().getTier(ResourceLocation.tryParse(te.getString("tier_id")));
-            }
-        }
-        final var domains = TierService.getInstance().inferDomains(stack.getItem());
-        if (domains.isEmpty()) {
-            return Optional.empty();
-        }
-        final var preferred = domains.iterator().next();
-        return TierService.getInstance().getInitialTierForItem(stack.getItem(), preferred);
+        return TierService.getInstance().resolveCurrentTier(stack, null);
     }
 
     public boolean attuneStack(final ItemStack mainHand, final ItemStack offhand) {
@@ -96,7 +95,8 @@ public final class UpgradeService implements IUpgradeService {
         if (current.isEmpty()) {
             return false;
         }
-        final Optional<TierEdge> edge = PathService.getInstance().resolveAttunementEdge(current.get().id(), offhand);
+        final Optional<TierEdge> edge = PathService.getInstance()
+                .resolveAttunementEdge(current.get().id(), current.get().domain(), offhand);
         if (edge.isEmpty()) {
             return false;
         }
@@ -111,8 +111,8 @@ public final class UpgradeService implements IUpgradeService {
         if (stack.isEmpty() || amount <= 0 || !TieredEchoesConfig.ENABLE_ITEM_XP.get()) {
             return;
         }
-        final int next = getStoredExperience(stack) + amount;
-        setStoredExperience(stack, next);
+        final int next = this.getStoredExperience(stack) + amount;
+        this.setStoredExperience(stack, next);
     }
 
     public int getStoredExperience(final ItemStack stack) {
@@ -148,25 +148,24 @@ public final class UpgradeService implements IUpgradeService {
     }
 
     public Optional<ItemStack> tryAutoUpgrade(final ItemStack stack) {
-        if (stack.isEmpty() || !TieredEchoesConfig.ENABLE_ITEM_XP.get()) {
+        final TierPolicy policy = PolicyService.getInstance().get();
+        if (stack.isEmpty() || !TieredEchoesConfig.ENABLE_ITEM_XP.get() || !policy.autoUpgradeEnabled()) {
             return Optional.empty();
         }
-        final Optional<TierDefinition> current = getCurrentTier(stack);
+        final Optional<TierDefinition> current = this.getCurrentTier(stack);
         if (current.isEmpty()) {
             return Optional.empty();
         }
-        final Optional<TierDomain> preferredDomain = TierService.getInstance().inferDomains(stack.getItem()).stream().findFirst();
-        if (preferredDomain.isEmpty()) {
-            return Optional.empty();
-        }
-        final List<TierEdge> nextEdges = new ArrayList<>(PathService.getInstance().resolveNextEdges(current.get().id(), getSelectedBranchId(stack)));
+        final TierDomain domain = current.get().domain();
+        final Optional<String> selectedBranch = this.getSelectedBranchId(stack);
+        final List<TierEdge> nextEdges = new ArrayList<>(PathService.getInstance().resolveNextEdges(current.get().id(), domain, selectedBranch));
         if (nextEdges.isEmpty()) {
             return Optional.empty();
         }
-        final int currentXp = getStoredExperience(stack);
+        final int currentXp = this.getStoredExperience(stack);
         if (nextEdges.size() == 1) {
             final TierEdge edge = nextEdges.get(0);
-            final TierDefinition target = TierService.getInstance().getTier(edge.to()).orElse(null);
+            final TierDefinition target = TierService.getInstance().getTier(edge.to(), domain).orElse(null);
             if (target == null) {
                 return Optional.empty();
             }
@@ -174,14 +173,14 @@ public final class UpgradeService implements IUpgradeService {
             if (currentXp < required) {
                 return Optional.empty();
             }
-            return Optional.of(finishUpgrade(stack, target, edge, required));
+            return Optional.of(this.finishUpgrade(stack, target, edge, required));
         }
-        if (!TieredEchoesConfig.ENABLE_AUTO_UPGRADE_SINGLE_PATH.get() && getSelectedBranchId(stack).isEmpty()) {
+        if (!TieredEchoesConfig.ENABLE_AUTO_UPGRADE_SINGLE_PATH.get() && selectedBranch.isEmpty()) {
             return Optional.empty();
         }
         final List<TierEdge> eligible = new ArrayList<>();
         for (final TierEdge edge : nextEdges) {
-            final TierDefinition target = TierService.getInstance().getTier(edge.to()).orElse(null);
+            final TierDefinition target = TierService.getInstance().getTier(edge.to(), domain).orElse(null);
             if (target == null) {
                 continue;
             }
@@ -194,36 +193,50 @@ public final class UpgradeService implements IUpgradeService {
         if (eligible.isEmpty()) {
             return Optional.empty();
         }
-        final TierEdge chosen = PathService.getInstance().chooseRandomEligibleEdge(stack, current.get().id(), eligible).orElse(eligible.get(0));
-        final TierDefinition target = TierService.getInstance().getTier(chosen.to()).orElse(null);
+        final TierEdge chosen = switch (policy.multiPathResolution()) {
+            // Deterministic: makes a given item always walk the same branch, which is what a datapack
+            // asking for FIRST is after.
+            case FIRST -> eligible.get(0);
+            case RANDOM -> PathService.getInstance()
+                    .chooseRandomEligibleEdge(stack, current.get().id(), eligible)
+                    .orElse(eligible.get(0));
+        };
+        final TierDefinition target = TierService.getInstance().getTier(chosen.to(), domain).orElse(null);
         if (target == null) {
             return Optional.empty();
         }
         final int required = chosen.effectiveExperienceRequirement(target.experienceRequired());
-        return Optional.of(finishUpgrade(stack, target, chosen, required));
+        return Optional.of(this.finishUpgrade(stack, target, chosen, required));
     }
 
     private ItemStack finishUpgrade(final ItemStack stack, final TierDefinition target, final TierEdge chosen, final int requiredXp) {
         final ItemStack copy = stack.copy();
-        final int remainder = Math.max(0, getStoredExperience(copy) - requiredXp);
-        writeTierState(copy, target, false);
-        setStoredExperience(copy, remainder);
-        clearSelectedBranch(copy);
+        final int currentXp = this.getStoredExperience(copy);
+        // carry_over_excess_xp=false makes the upgrade spend the whole pool, which is the pacing lever
+        // a datapack reaches for when automatic progression feels too fast.
+        final int remainder = PolicyService.getInstance().get().carryOverExcessXp()
+                ? Math.max(0, currentXp - requiredXp)
+                : 0;
+        this.writeTierState(copy, target, false);
+        this.setStoredExperience(copy, remainder);
+        this.clearSelectedBranch(copy);
         final CompoundTag te = copy.getOrCreateTagElement(TE_TAG);
         te.putString("last_branch_id", PathService.getInstance().effectiveBranchId(chosen));
         return copy;
     }
 
     public Component describeStack(final ItemStack stack) {
-        final Optional<TierDefinition> tier = getCurrentTier(stack);
-        final Component base = Component.literal(stack.getHoverName().getString());
+        final Optional<TierDefinition> tier = this.getCurrentTier(stack);
+        // Item#getName is used rather than ItemStack#getHoverName so the diagnostic line does not
+        // repeat the [Tier] suffix that the name mixin already appends.
+        final String baseName = stack.getItem().getName(stack).getString();
         if (tier.isEmpty()) {
-            return base;
+            return Component.literal(baseName).withStyle(ChatFormatting.GRAY);
         }
-        final String branch = getSelectedBranchId(stack).orElse("none");
-        return Component.literal(base.getString() + " | tier=" + tier.get().id() + " | xp=" + getStoredExperience(stack) + " | branch=" + branch).withStyle(ChatFormatting.GRAY);
+        final String branch = this.getSelectedBranchId(stack).orElse("none");
+        return Component.literal(baseName + " | tier=" + tier.get().id() + " | xp=" + this.getStoredExperience(stack)
+                + " | branch=" + branch).withStyle(ChatFormatting.GRAY);
     }
-
 
     private static void applyArsThreadSlotState(final ItemStack stack, final TierDefinition tier, final CompoundTag te) {
         final ResourceLocation itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem());
@@ -239,7 +252,11 @@ public final class UpgradeService implements IUpgradeService {
         te.putInt("ars_thread_slot_tier_bonus", slotTierBonus);
     }
 
-    private static void writeTierState(final ItemStack stack, final TierDefinition tier, final boolean preview) {
+    /**
+     * Records tier state in NBT only. The visible name is composed at render time by
+     * {@code ItemStackNameMixin} so that it follows material upgrades and stays localized.
+     */
+    private void writeTierState(final ItemStack stack, final TierDefinition tier, final boolean preview) {
         final CompoundTag te = stack.getOrCreateTagElement(TE_TAG);
         te.putString("tier_id", tier.id().toString());
         te.putString("tier_domain", tier.domain().getSerializedName());
@@ -250,6 +267,5 @@ public final class UpgradeService implements IUpgradeService {
         te.putBoolean("generated_upgrade_template", tier.generatedUpgradeTemplate());
         te.putBoolean("generated_downgrade_template", tier.generatedDowngradeTemplate());
         applyArsThreadSlotState(stack, tier, te);
-        stack.setHoverName(TierFormattingUtil.buildTieredName(stack, tier));
     }
 }
