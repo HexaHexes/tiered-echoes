@@ -103,8 +103,6 @@ dependencies {
 
     compileOnly("org.projectlombok:lombok:1.18.42")
     annotationProcessor("org.projectlombok:lombok:1.18.42")
-    testCompileOnly("org.projectlombok:lombok:1.18.42")
-    testAnnotationProcessor("org.projectlombok:lombok:1.18.42")
 
     // Forge already ships Mixin at runtime; only the processor is needed for annotation processing/refmap generation.
     annotationProcessor("org.spongepowered:mixin:0.8.5:processor")
@@ -113,12 +111,12 @@ dependencies {
     compileOnly fg.deobf("mezz.jei:jei-${minecraft_version}-forge-api:${jei_version}")
     runtimeOnly fg.deobf("mezz.jei:jei-${minecraft_version}-forge:${jei_version}")
 
-//    runtimeOnly(fg.deobf("curse.maven:prism-lib-638111:4650325"))
-//    runtimeOnly(fg.deobf("curse.maven:iceberg-520110:5838149"))
+    runtimeOnly(fg.deobf("curse.maven:prism-lib-638111:4650325"))
+    runtimeOnly(fg.deobf("curse.maven:iceberg-520110:5838149"))
 //    runtimeOnly(fg.deobf("curse.maven:legendary-tooltips-532127:4662781"))
 
-    runtimeOnly(fg.deobf("curse.maven:sophisticated-core-618298:7916595"))
-    runtimeOnly(fg.deobf("curse.maven:sophisticated-backpacks-422301:7916619"))
+    runtimeOnly(fg.deobf("curse.maven:equipment-compare-502561:4650073"))
+    runtimeOnly(fg.deobf("curse.maven:item-borders-513769:5903326"))
 
     runtimeOnly(fg.deobf("curse.maven:placebo-283644:6274231"))
     runtimeOnly(fg.deobf("curse.maven:apothic-attributes-898963:5634071"))
@@ -142,8 +140,6 @@ tasks.named('processResources', ProcessResources).configure {
     from('src/main/resources') {
         include 'tieredechoes.mixins.json'
     }
-
-    exclude 'assets/tieredechoes/lang/en_us.json'
 
     var replaceProperties = [
             minecraft_version: minecraft_version, minecraft_version_range: minecraft_version_range,

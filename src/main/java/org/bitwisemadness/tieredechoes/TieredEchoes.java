@@ -10,12 +10,11 @@ import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.bitwisemadness.tieredechoes.common.compat.apotheosis.ApotheosisCompatBridge;
 import org.bitwisemadness.tieredechoes.common.compat.arsnouveau.ArsNouveauCompatBridge;
-import org.bitwisemadness.tieredechoes.common.compat.curios.CuriosCompatBridge;
 import org.bitwisemadness.tieredechoes.common.compat.ironsspells.IronsSpellsCompatBridge;
 import org.bitwisemadness.tieredechoes.common.compat.legendarysurvivaloverhaul.LegendarySurvivalOverhaulCompatBridge;
-import org.bitwisemadness.tieredechoes.common.compat.sophisticatedbackpacks.SophisticatedBackpacksCompatBridge;
 import org.bitwisemadness.tieredechoes.common.config.TieredEchoesConfig;
 import org.bitwisemadness.tieredechoes.common.registry.TECreativeTabs;
+import org.bitwisemadness.tieredechoes.common.registry.TEItems;
 import org.slf4j.Logger;
 
 @Mod(TieredEchoes.MOD_ID)
@@ -27,6 +26,7 @@ public final class TieredEchoes {
     public TieredEchoes() {
         final IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
 
+        TEItems.ITEMS.register(modBus);
         TECreativeTabs.TABS.register(modBus);
         modBus.addListener(this::onCommonSetup);
 
@@ -37,16 +37,11 @@ public final class TieredEchoes {
     private void onCommonSetup(final FMLCommonSetupEvent event) {
         LOGGER.info("Initializing {}", MOD_NAME);
         if (TieredEchoesConfig.COMPAT_AUDIT_MODE.get()) {
-            LOGGER.info("[CompatAudit] curios={}, apotheosis={}, ars_nouveau={}, irons_spellbooks={}, legendarysurvivaloverhaul={}, sophisticatedbackpacks={}",
-                    CuriosCompatBridge.getInstance().isLoaded(),
+            LOGGER.info("[CompatAudit] apotheosis={}, ars_nouveau={}, irons_spellbooks={}, legendarysurvivaloverhaul={}",
                     ApotheosisCompatBridge.getInstance().isLoaded(),
                     ArsNouveauCompatBridge.getInstance().isLoaded(),
                     IronsSpellsCompatBridge.getInstance().isLoaded(),
-                    LegendarySurvivalOverhaulCompatBridge.getInstance().isLoaded(),
-                    SophisticatedBackpacksCompatBridge.getInstance().isLoaded());
-            if (TieredEchoesConfig.COMPAT_AUDIT_VERBOSE.get()) {
-                LOGGER.info("[CompatAudit] Curios slots discovered: {}", CuriosCompatBridge.getInstance().getRegisteredSlotTypes());
-            }
+                    LegendarySurvivalOverhaulCompatBridge.getInstance().isLoaded());
         }
     }
 }

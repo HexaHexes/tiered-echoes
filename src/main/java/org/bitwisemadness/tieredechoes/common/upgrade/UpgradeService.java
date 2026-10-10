@@ -5,10 +5,10 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
-import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.api.common.IUpgradeService;
 import org.bitwisemadness.tieredechoes.common.config.TieredEchoesConfig;
 import org.bitwisemadness.tieredechoes.common.path.PathService;
+import org.bitwisemadness.tieredechoes.common.util.TierFormattingUtil;
 import org.bitwisemadness.tieredechoes.common.path.TierEdge;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
@@ -224,6 +224,21 @@ public final class UpgradeService implements IUpgradeService {
         return Component.literal(base.getString() + " | tier=" + tier.get().id() + " | xp=" + getStoredExperience(stack) + " | branch=" + branch).withStyle(ChatFormatting.GRAY);
     }
 
+
+    private static void applyArsThreadSlotState(final ItemStack stack, final TierDefinition tier, final CompoundTag te) {
+        final ResourceLocation itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem());
+        if (itemId == null || !"ars_nouveau".equals(itemId.getNamespace()) || !(stack.getItem() instanceof net.minecraft.world.item.ArmorItem)) {
+            te.remove("ars_thread_slot_tier_bonus");
+            return;
+        }
+        final int slotTierBonus = Math.max(0, Math.min(3, tier.sortOrder()));
+        if (slotTierBonus <= 0) {
+            te.remove("ars_thread_slot_tier_bonus");
+            return;
+        }
+        te.putInt("ars_thread_slot_tier_bonus", slotTierBonus);
+    }
+
     private static void writeTierState(final ItemStack stack, final TierDefinition tier, final boolean preview) {
         final CompoundTag te = stack.getOrCreateTagElement(TE_TAG);
         te.putString("tier_id", tier.id().toString());
@@ -234,5 +249,7 @@ public final class UpgradeService implements IUpgradeService {
         te.putBoolean("preview", preview);
         te.putBoolean("generated_upgrade_template", tier.generatedUpgradeTemplate());
         te.putBoolean("generated_downgrade_template", tier.generatedDowngradeTemplate());
+        applyArsThreadSlotState(stack, tier, te);
+        stack.setHoverName(TierFormattingUtil.buildTieredName(stack, tier));
     }
 }

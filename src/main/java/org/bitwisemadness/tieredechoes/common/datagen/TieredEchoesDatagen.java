@@ -32,10 +32,7 @@ public class TieredEchoesDatagen {
         generator.addProvider(event.includeServer(), new LsoThermalFeatureProvider(output));
         generator.addProvider(event.includeServer(), new ArsAttributesFeatureProvider(output));
         generator.addProvider(event.includeServer(), new ArsThreadsFeatureProvider(output));
-        generator.addProvider(event.includeServer(), new CuriosFeatureProvider(output));
-        generator.addProvider(event.includeServer(), new CuriosSetsFeatureProvider(output));
         generator.addProvider(event.includeServer(), new IronsSpellsAttributesFeatureProvider(output));
-        generator.addProvider(event.includeServer(), new SophisticatedBackpacksFeatureProvider(output));
         generator.addProvider(event.includeServer(), new ArmorSetsFeatureProvider(output));
         generator.addProvider(event.includeServer(), new ItemXpFeatureProvider(output));
         generator.addProvider(event.includeServer(), new ItemXpOnlyFeatureProvider(output));

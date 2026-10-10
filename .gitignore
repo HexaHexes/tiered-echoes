@@ -23,5 +23,10 @@ run
 run-data
 src/generated
 
+# Minecraft drops these wherever it is launched from, including nested mod folders.
+logs
+crash-reports
+screenshots
+
 # Files from Forge MDK
 forge*changelog.txt
