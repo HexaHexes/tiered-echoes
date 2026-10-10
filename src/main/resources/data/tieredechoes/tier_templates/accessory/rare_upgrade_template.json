@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "id": "tieredechoes:rare_accessory_upgrade_template",
+  "tier": "tieredechoes:rare",
+  "domain": "accessory",
+  "kind": "upgrade",
+  "item": "tieredechoes:rare_upgrade_template"
+}

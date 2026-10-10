@@ -13,8 +13,10 @@ import org.bitwisemadness.tieredechoes.common.compat.arsnouveau.ArsNouveauCompat
 import org.bitwisemadness.tieredechoes.common.compat.ironsspells.IronsSpellsCompatBridge;
 import org.bitwisemadness.tieredechoes.common.compat.legendarysurvivaloverhaul.LegendarySurvivalOverhaulCompatBridge;
 import org.bitwisemadness.tieredechoes.common.config.TieredEchoesConfig;
+import org.bitwisemadness.tieredechoes.common.network.TENetwork;
 import org.bitwisemadness.tieredechoes.common.registry.TECreativeTabs;
 import org.bitwisemadness.tieredechoes.common.registry.TEItems;
+import org.bitwisemadness.tieredechoes.common.registry.TERecipes;
 import org.slf4j.Logger;
 
 @Mod(TieredEchoes.MOD_ID)
@@ -27,7 +29,11 @@ public final class TieredEchoes {
         final IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
 
         TEItems.ITEMS.register(modBus);
+        TERecipes.SERIALIZERS.register(modBus);
         TECreativeTabs.TABS.register(modBus);
+        // Channel creation has to happen before the first handshake, so it lives in the constructor
+        // rather than in a common-setup listener.
+        TENetwork.register();
         modBus.addListener(this::onCommonSetup);
 
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, TieredEchoesConfig.SPEC);

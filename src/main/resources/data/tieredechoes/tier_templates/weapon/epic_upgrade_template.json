@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "id": "tieredechoes:epic_weapon_upgrade_template",
+  "tier": "tieredechoes:epic",
+  "domain": "weapon",
+  "kind": "upgrade",
+  "item": "tieredechoes:epic_upgrade_template"
+}

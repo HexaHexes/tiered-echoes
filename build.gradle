@@ -54,21 +54,6 @@ minecraft {
             property 'forge.enabledGameTestNamespaces', mod_id
             arg '-mixin.config=tieredechoes.mixins.json'
         }
-
-        data {
-            workingDirectory project.file('run-data')
-            arg '-mixin.config=tieredechoes.mixins.json'
-            args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
-        }
-    }
-}
-
-sourceSets {
-    main {
-        resources {
-            srcDir 'src/main/resources'
-            srcDir 'src/generated/resources'
-        }
     }
 }
 
@@ -152,10 +137,6 @@ tasks.named('processResources', ProcessResources).configure {
 
     filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
         expand replaceProperties + [project: project]
-    }
-
-    from('src/generated/resources') {
-        exclude 'assets/tieredechoes/lang/en_us.json'
     }
 }
 

@@ -7,7 +7,7 @@ import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
-import org.bitwisemadness.tieredechoes.common.config.TieredEchoesConfig;
+import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
 import org.bitwisemadness.tieredechoes.common.upgrade.UpgradeService;
 import org.bitwisemadness.tieredechoes.common.util.PlayerMessageUtil;
 
@@ -26,7 +26,8 @@ public class ItemAttunementHandler {
             return;
         }
         if (UpgradeService.getInstance().attuneStack(mainHand, offhand)) {
-            if (TieredEchoesConfig.CONSUME_ATTUNEMENT_ITEM.get() && !event.getEntity().getAbilities().instabuild) {
+            // The datapack policy wins over the config file when it states a value; see TierPolicy.
+            if (PolicyService.getInstance().consumeAttunementItem() && !event.getEntity().getAbilities().instabuild) {
                 offhand.shrink(1);
             }
             PlayerMessageUtil.actionBar(event.getEntity(), net.minecraft.network.chat.Component.literal("Attuned path updated."));

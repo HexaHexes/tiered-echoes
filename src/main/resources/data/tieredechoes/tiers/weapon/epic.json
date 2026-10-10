@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "tieredechoes:epic",
+  "domain": "weapon",
+  "display_rarity": "EPIC",
+  "sort_order": 3,
+  "experience_required": 150,
+  "generated_upgrade_template": true,
+  "generated_downgrade_template": true,
+  "upgrade_ingredient": {
+    "item": "minecraft:netherite_ingot"
+  },
+  "downgrade_ingredient": {
+    "item": "minecraft:diamond"
+  },
+  "previous_tier": "tieredechoes:rare",
+  "attribute_multipliers": {"durability":1.35,"attack_damage":1.4,"attack_speed":1.12,"armor":1.4,"armor_toughness":1.35,"knockback_resistance":1.25,"max_mana":1.4,"mana_regen":1.25,"cold_resistance":1.4,"heat_resistance":1.4,"thermal_resistance":1.4},
+  "curios_set_bonuses": {"*2":1.12,"*3":1.18,"*4":1.24},
+  "compat_amplifiers": {}
+}
