@@ -48,11 +48,17 @@ file name differs.
 If you add or rename a `@GameTest` method, regenerate them:
 
 ```
-pwsh tools/generate-gametest-structures.ps1
+gradlew generateGameTestStructures
 ```
 
 A `GameTestStructuresTest` in the JUnit suite fails with the exact list of missing files if
-this is forgotten, so a renamed test never surfaces as an opaque game test server crash.
+this is forgotten, so a renamed test never surfaces as an opaque game test server crash. It
+derives the ids from the same class the generator does, so the two cannot drift apart about
+which tests exist — they used to carry separate copies of the same pattern.
+
+The generator writes the NBT through Minecraft's own `NbtIo` rather than encoding bytes by
+hand, and runs as a `JavaExec` task against the main source set, so it needs no separate
+runtime and cannot be run against a checkout whose Java does not match.
 
 ## Continuous integration
 
