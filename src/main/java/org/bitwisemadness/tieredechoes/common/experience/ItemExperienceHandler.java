@@ -66,6 +66,13 @@ public final class ItemExperienceHandler {
         for (final ItemStack armor : player.getArmorSlots()) {
             award(armor, TierDomain.ARMOR, 1);
         }
+        // The three awards below look like leftovers now that shields, elytras and ranged weapons
+        // ship no ladder, and they are deliberately kept. award() checks domain membership, so each
+        // one is inert until a datapack declares a ladder for its domain — at which point the ladder
+        // needs experience to climb and these are where it comes from. Removing them would make
+        // declaring a shield ladder a change that requires a Java patch, which is the one thing the
+        // tag-driven membership exists to avoid.
+        //
         // getArmorSlots() covers only the four armour slots, so an elytra — which occupies the chest
         // slot without being armour — is read separately.
         award(player.getItemBySlot(EquipmentSlot.CHEST), TierDomain.ELYTRA, 1);

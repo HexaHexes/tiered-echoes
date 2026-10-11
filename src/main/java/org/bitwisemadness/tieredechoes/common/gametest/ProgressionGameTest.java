@@ -51,37 +51,40 @@ public final class ProgressionGameTest {
     }
 
     /**
-     * Attunement is what makes a branch choice explicit; leaving the selection on the item after
-     * spending it would silently pin every later upgrade to that same branch.
+     * Attunement is disabled pending a rework of branching, so there is no branch to select — but
+     * the upgrade it used to gate must still happen. An item upgraded before the change also carries
+     * a stale selection, and a test that only checked "attunement does nothing" would pass just as
+     * happily if progression had silently stopped working alongside it.
      */
     @GameTest
-    public static void attuningSelectsABranchAndTheUpgradeSpendsIt(final GameTestHelper helper) {
+    public static void attunementIsDisabledAndTheUpgradeStillHappens(final GameTestHelper helper) {
         final TierDefinition uncommon = GameTestTiers.tier(helper, TierDomain.WEAPON, "uncommon");
         final ItemStack stack = GameTestTiers.tieredSword(helper, "common");
 
-        final boolean attuned = UpgradeService.getInstance().attuneStack(stack, new ItemStack(Items.IRON_INGOT));
-        helper.assertTrue(attuned, "the shipped common -> uncommon addition is an iron ingot");
-        helper.assertTrue(UpgradeService.getInstance().getSelectedBranchId(stack, TierDomain.WEAPON).isPresent(),
-                "attunement should have recorded which branch was chosen");
+        helper.assertFalse(UpgradeService.getInstance().attuneStack(stack, new ItemStack(Items.IRON_INGOT)),
+                "attunement must report that it did nothing");
+        helper.assertFalse(UpgradeService.getInstance().getSelectedBranchId(stack, TierDomain.WEAPON).isPresent(),
+                "no selection may be written while selection is disabled");
 
         UpgradeService.getInstance().setStoredExperience(stack, TierDomain.WEAPON, uncommon.experienceRequired());
         final ItemStack upgraded = UpgradeService.getInstance().tryAutoUpgrade(stack, helper.getLevel().getServer())
-                .orElseThrow(() -> new GameTestAssertException("the attuned branch should still be upgradeable"));
+                .orElseThrow(() -> new GameTestAssertException("the upgrade must still happen without an attunement"));
 
-        helper.assertFalse(UpgradeService.getInstance().getSelectedBranchId(upgraded, TierDomain.WEAPON).isPresent(),
-                "the branch selection must be spent by the upgrade it was made for");
+        helper.assertTrue(UpgradeService.getInstance().getCurrentTier(upgraded, TierDomain.WEAPON)
+                        .filter(tier -> tier.id().equals(uncommon.id())).isPresent(),
+                "expected to land on " + uncommon.id());
         helper.succeed();
     }
 
     /** At the top of the ladder there is nothing to spend experience on, and that must be quiet. */
     @GameTest
     public static void anItemAtTheTopOfTheLadderSimplyStops(final GameTestHelper helper) {
-        final ItemStack stack = GameTestTiers.tieredSword(helper, "epic");
+        final ItemStack stack = GameTestTiers.tieredSword(helper, "legendary");
         UpgradeService.getInstance().setStoredExperience(stack, TierDomain.WEAPON, 10_000);
 
         final Optional<ItemStack> upgraded = UpgradeService.getInstance().tryAutoUpgrade(stack, helper.getLevel().getServer());
 
-        helper.assertFalse(upgraded.isPresent(), "an epic item has nowhere further to go");
+        helper.assertFalse(upgraded.isPresent(), "a legendary item has nowhere further to go");
         helper.assertTrue(UpgradeService.getInstance().getStoredExperience(stack, TierDomain.WEAPON) == 10_000,
                 "unspendable experience should stay on the item rather than be discarded");
         helper.succeed();

@@ -4,6 +4,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Rarity;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.path.TierEdge;
+import org.bitwisemadness.tieredechoes.common.rarity.TERarities;
 import org.bitwisemadness.tieredechoes.common.template.TemplateDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
@@ -33,21 +34,52 @@ import java.util.Optional;
 public final class ShippedLadder {
 
     /** Tier order along the ladder. Index position is what pairs the parallel tables below. */
-    private static final List<String> TIER_NAMES = List.of("common", "uncommon", "rare", "epic");
-    private static final List<Rarity> RARITIES = List.of(Rarity.COMMON, Rarity.UNCOMMON, Rarity.RARE, Rarity.EPIC);
-    private static final List<Integer> EXPERIENCE = List.of(0, 25, 75, 150);
+    private static final List<String> TIER_NAMES = List.of("common", "uncommon", "rare", "epic", "legendary");
 
     /**
-     * Ingredients for weapon, tool and armour ladders. Accessory gear escalates through rarer
-     * materials because accessories are rarer themselves and have no durability to trade away.
+     * Rarity per rung, as names rather than constants.
+     *
+     * <p>{@code LEGENDARY} is added at runtime by {@link TERarities} and so does not exist as a
+     * source-level constant; spelling the table as strings keeps this class compilable and lets the
+     * resolution happen where the mod is guaranteed to be loaded.</p>
      */
-    private static final List<String> STANDARD_INGREDIENTS = List.of(
-            "minecraft:cobblestone", "minecraft:iron_ingot", "minecraft:diamond", "minecraft:netherite_ingot");
-    private static final List<String> ACCESSORY_INGREDIENTS = List.of(
-            "minecraft:gold_ingot", "minecraft:emerald", "minecraft:diamond", "minecraft:nether_star");
+    private static final List<String> RARITIES = List.of("COMMON", "UNCOMMON", "RARE", "EPIC", TERarities.LEGENDARY);
 
-    /** What a player spends to craft a second copy of a tier's templates. */
-    private static final List<String> TEMPLATE_CRAFTING_INGREDIENTS = STANDARD_INGREDIENTS;
+    /**
+     * Experience required to <em>reach</em> each rung.
+     *
+     * <p>Cubic rather than geometric, because the shape matters more than the total. A doubling
+     * curve spends most of its budget on the last step and makes every earlier step feel like
+     * preamble; a cubic one keeps the opening cheap and puts the weight where a player has already
+     * committed to the item. Derived rather than written out so that extending the ladder extends
+     * the curve instead of pairing a new tier with a stale number.</p>
+     *
+     * <p>The rung index is one-based because tierless is not a rung: an item with nothing recorded
+     * is untiered, not sitting on a bottom tier, so there is no index zero to pay for.</p>
+     */
+    private static final List<Integer> EXPERIENCE = experienceCurve();
+
+    private static List<Integer> experienceCurve() {
+        final List<Integer> curve = new ArrayList<>();
+        for (int rung = 1; rung <= TIER_NAMES.size(); rung++) {
+            curve.add(25 * rung * rung * rung);
+        }
+        return List.copyOf(curve);
+    }
+
+    /**
+     * The material each step up costs, one per rung.
+     *
+     * <p>Copper opens the ladder and netherite closes it. The escalation is the familiar vanilla
+     * progression read in the order a player actually meets the metals, so the smithing table
+     * teaches the cost curve without a tooltip.</p>
+     */
+    private static final List<String> UPGRADE_INGREDIENTS = List.of(
+            "minecraft:copper_ingot", "minecraft:iron_ingot", "minecraft:gold_ingot",
+            "minecraft:diamond", "minecraft:netherite_ingot");
+
+    /** What a player spends to craft a second copy of a tier's upgrade template. */
+    private static final List<String> TEMPLATE_CRAFTING_INGREDIENTS = UPGRADE_INGREDIENTS;
 
     private static final List<Map<String, Double>> ATTRIBUTE_MULTIPLIERS = List.of(
             map("durability", 1.0D, "attack_damage", 1.0D, "attack_speed", 1.0D, "armor", 1.0D,
@@ -65,46 +97,24 @@ public final class ShippedLadder {
             map("durability", 1.35D, "attack_damage", 1.4D, "attack_speed", 1.12D, "armor", 1.4D,
                     "armor_toughness", 1.35D, "knockback_resistance", 1.25D, "max_mana", 1.4D,
                     "mana_regen", 1.25D, "cold_resistance", 1.4D, "heat_resistance", 1.4D,
-                    "thermal_resistance", 1.4D));
-
-    /**
-     * Multipliers for domains whose items carry no attributes at all in vanilla — a shield, an elytra
-     * and a bow all scale durability and nothing else. Declaring {@code attack_damage} on a bow tier
-     * would do nothing, because no such modifier is ever applied to it, and a datapack author reading
-     * the file would reasonably conclude that it was.
-     */
-    private static final List<Map<String, Double>> DURABILITY_ONLY_MULTIPLIERS = List.of(
-            map("durability", 1.0D),
-            map("durability", 1.1D),
-            map("durability", 1.2D),
-            map("durability", 1.35D));
-
-    private static final List<Map<String, Double>> SET_BONUSES = List.of(
-            map("*2", 1.05D),
-            map("*2", 1.07D, "*3", 1.1D),
-            map("*2", 1.1D, "*3", 1.15D, "*4", 1.2D),
-            map("*2", 1.12D, "*3", 1.18D, "*4", 1.24D));
-
-    /** Domains with no attribute surface, so their tiers declare durability scaling only. */
-    private static boolean isDurabilityOnly(final TierDomain domain) {
-        return switch (domain) {
-            case SHIELD, RANGED_WEAPONS, ELYTRA -> true;
-            default -> false;
-        };
-    }
-
-    /**
-     * Curios set bonuses only mean anything for items that live in a curios slot. Emitting them on a
-     * shield tier would advertise a feature those items cannot use.
-     */
-    private static Map<String, Double> setBonusesFor(final TierDomain domain, final int index) {
-        return isDurabilityOnly(domain) ? Map.of() : SET_BONUSES.get(index);
-    }
+                    "thermal_resistance", 1.4D),
+            map("durability", 1.55D, "attack_damage", 1.6D, "attack_speed", 1.17D, "armor", 1.6D,
+                    "armor_toughness", 1.55D, "knockback_resistance", 1.4D, "max_mana", 1.6D,
+                    "mana_regen", 1.4D, "cold_resistance", 1.6D, "heat_resistance", 1.6D,
+                    "thermal_resistance", 1.6D));
 
     private ShippedLadder() {
     }
 
-    /** The domains that ship a ladder. Every {@code TierDomain} is one; there are no compat-only ones. */
+    /**
+     * The domains that ship a ladder.
+     *
+     * <p>{@code TierDomain} still holds shield, ranged, elytra and accessory, and their tag mappings
+     * still resolve, so a datapack can declare a ladder for any of them. What is absent is the JSON
+     * for a built-in one: those items scale durability and nothing else in vanilla, so a shipped
+     * ladder would be a durability table wearing a different name, and a pack that wants to give a
+     * modded bow real attributes is better served writing the contract it actually means.</p>
+     */
     public static List<TierDomain> domains() {
         return TierDomain.builtinDomains();
     }
@@ -113,17 +123,22 @@ public final class ShippedLadder {
         return TIER_NAMES;
     }
 
-    /** One upgrade and one downgrade template per tier, keyed by tier alone. */
+    /**
+     * Templates the mod ships.
+     *
+     * <p>Upgrade only. Downgrades are disabled pending a rework of how the way down should be
+     * expressed, so generating downgrade templates would put items in the creative tab and recipes
+     * in the book for a transition the smithing table will not perform.</p>
+     */
     public static List<String> templateKinds() {
-        return List.of("upgrade", "downgrade");
+        return List.of("upgrade");
     }
 
     public static List<TierDefinition> tiers() {
         final List<TierDefinition> tiers = new ArrayList<>();
         for (final TierDomain domain : domains()) {
-            final List<String> ingredients = ingredientsFor(domain);
             for (int index = 0; index < TIER_NAMES.size(); index++) {
-                tiers.add(tier(domain, ingredients, index));
+                tiers.add(tier(domain, index));
             }
         }
         return tiers;
@@ -132,11 +147,11 @@ public final class ShippedLadder {
     public static List<TierEdge> edges() {
         final List<TierEdge> edges = new ArrayList<>();
         for (final TierDomain domain : domains()) {
-            final List<String> ingredients = ingredientsFor(domain);
-            // Each edge steps one position up the ladder and points its downgrade back at the tier
-            // it came from, so the way down is always the mirror of the way up.
+            // Each edge steps one position up the ladder. There is no edge into the first rung,
+            // because there is no rung below it: an untiered item joins the ladder through the
+            // bootstrap transition rather than through the path graph.
             for (int index = 1; index < TIER_NAMES.size(); index++) {
-                edges.add(edge(domain, ingredients, index));
+                edges.add(edge(domain, index));
             }
         }
         return edges;
@@ -150,7 +165,7 @@ public final class ShippedLadder {
                 templates.add(new TemplateDefinition(
                         id,
                         new ResourceLocation(TieredEchoes.MOD_ID, tier),
-                        "downgrade".equals(kind),
+                        false,
                         Optional.of(id),
                         Optional.empty(),
                         Optional.empty()));
@@ -183,28 +198,40 @@ public final class ShippedLadder {
         return TEMPLATE_CRAFTING_INGREDIENTS;
     }
 
-    private static TierDefinition tier(final TierDomain domain, final List<String> ingredients, final int index) {
+    /**
+     * The rarity a rung declares, as the name written to {@code display_rarity}.
+     *
+     * <p>Read from the table rather than from the resolved {@link Rarity} for a specific reason:
+     * {@code LEGENDARY} only exists once Forge has extended the enum, which happens in a game boot
+     * and not in a unit-test JVM. Calling {@code rarity.name()} would therefore yield
+     * {@code LEGENDARY} from {@code runData} and {@code COMMON} from the drift guard, and the two
+     * would fight over the same committed file. A generated artifact's content must not depend on
+     * whether a class transformer happened to run.</p>
+     */
+    public static String rarityNameFor(final ResourceLocation tierId) {
+        final int index = TIER_NAMES.indexOf(tierId.getPath());
+        return index < 0 ? Rarity.COMMON.name() : RARITIES.get(index);
+    }
+
+    private static TierDefinition tier(final TierDomain domain, final int index) {
         final String name = TIER_NAMES.get(index);
-        // A tier's downgrade ingredient is the material the tier below it was made from, so stepping
-        // down refunds the difference rather than charging again for the same thing.
-        final String downgrade = index == 0 ? "minecraft:stick" : ingredients.get(index - 1);
-        final List<Map<String, Double>> multipliers =
-                isDurabilityOnly(domain) ? DURABILITY_ONLY_MULTIPLIERS : ATTRIBUTE_MULTIPLIERS;
+        // No downgrade ingredient: the way down is disabled, and declaring a material for a
+        // transition that cannot be taken would advertise a refund the table will not honour.
         return new TierDefinition(
                 new ResourceLocation(TieredEchoes.MOD_ID, name),
                 domain,
                 1,
-                RARITIES.get(index),
+                rarity(index),
                 index,
                 EXPERIENCE.get(index),
-                item(ingredients.get(index)),
-                Optional.of(item(downgrade)),
+                item(UPGRADE_INGREDIENTS.get(index)),
+                Optional.empty(),
                 index == 0 ? Optional.empty() : Optional.of(new ResourceLocation(TieredEchoes.MOD_ID, TIER_NAMES.get(index - 1))),
                 Optional.of(TieredEchoes.MOD_ID),
-                multipliers.get(index),
-                setBonusesFor(domain, index),
+                ATTRIBUTE_MULTIPLIERS.get(index),
                 Map.of(),
-                true,
+                Map.of(),
+                false,
                 true,
                 Optional.empty(),
                 Optional.empty(),
@@ -212,7 +239,7 @@ public final class ShippedLadder {
                 Optional.empty());
     }
 
-    private static TierEdge edge(final TierDomain domain, final List<String> ingredients, final int index) {
+    private static TierEdge edge(final TierDomain domain, final int index) {
         final ResourceLocation from = new ResourceLocation(TieredEchoes.MOD_ID, TIER_NAMES.get(index - 1));
         final ResourceLocation to = new ResourceLocation(TieredEchoes.MOD_ID, TIER_NAMES.get(index));
         return new TierEdge(
@@ -220,8 +247,9 @@ public final class ShippedLadder {
                 to,
                 domain,
                 index - 1,
-                Optional.of(item(ingredients.get(index))),
-                Optional.of(from),
+                Optional.of(item(UPGRADE_INGREDIENTS.get(index))),
+                // No downgrade target, for the same reason the tier declares no downgrade material.
+                Optional.empty(),
                 Optional.of(TieredEchoes.MOD_ID),
                 Optional.empty(),
                 Optional.empty(),
@@ -229,19 +257,8 @@ public final class ShippedLadder {
                 Map.of());
     }
 
-    /**
-     * The upgrade ingredients a domain walks up.
-     *
-     * <p>{@code ACCESSORY} and {@code ELYTRA} escalate through rarer materials because they are rare
-     * themselves and have no durability to trade away — an elytra's ladder is a rarity ladder, and
-     * making a player pay netherite to improve a flight item would be a materials joke rather than a
-     * progression step.</p>
-     */
-    private static List<String> ingredientsFor(final TierDomain domain) {
-        return switch (domain) {
-            case ACCESSORY, ELYTRA -> ACCESSORY_INGREDIENTS;
-            default -> STANDARD_INGREDIENTS;
-        };
+    private static Rarity rarity(final int index) {
+        return TERarities.byName(RARITIES.get(index), Rarity.COMMON);
     }
 
     private static IngredientMatcher item(final String id) {

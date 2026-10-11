@@ -28,43 +28,59 @@ public final class TemplateItemGameTest {
 
     /**
      * Templates are keyed by tier alone rather than by tier and domain, which is the whole point of
-     * the one-pair-per-tier layout: a sword and a pickaxe of the same tier spend the same template.
+     * the one-per-tier layout: a sword and a pickaxe of the same tier spend the same template.
+     *
+     * <p>Upgrade only. Downgrade templates are not registered, because downgrades are disabled
+     * pending a rework — and a registered item with nothing to spend it on would be a creative-tab
+     * entry advertising a transition the table refuses.</p>
      */
     @GameTest
-    public static void everyBuiltInTierResolvesBothTemplateItems(final GameTestHelper helper) {
-        for (final String path : List.of("common", "uncommon", "rare", "epic")) {
+    public static void everyBuiltInTierResolvesItsUpgradeTemplateAndNoDowngradeOne(final GameTestHelper helper) {
+        for (final String path : List.of("common", "uncommon", "rare", "epic", "legendary")) {
             final TierDefinition tier = GameTestTiers.tier(helper, TierDomain.WEAPON, path);
             final Optional<Item> upgrade = TemplateService.getInstance().templateItem(tier, false);
             final Optional<Item> downgrade = TemplateService.getInstance().templateItem(tier, true);
 
             helper.assertTrue(upgrade.isPresent(), tier.id() + " has no upgrade template item registered");
-            helper.assertTrue(downgrade.isPresent(), tier.id() + " has no downgrade template item registered");
-            helper.assertTrue(upgrade.get() != Items.AIR && downgrade.get() != Items.AIR,
+            helper.assertTrue(upgrade.get() != Items.AIR,
                     tier.id() + " resolved to air, which would leave the smithing slot unusable");
-            helper.assertTrue(upgrade.get() != downgrade.get(),
-                    tier.id() + " uses one item for both directions, so neither could be spent deliberately");
+            helper.assertTrue(downgrade.isEmpty(),
+                    tier.id() + " resolved a downgrade template, but downgrades are disabled");
         }
         helper.succeed();
     }
 
+    /**
+     * The point of the disable being only a disable: {@code tier_templates} parsing is untouched, so
+     * a datapack that declares a downgrade template still gets it. Re-enabling the feature is then a
+     * matter of shipping items again rather than of restoring a data path that was torn out.
+     */
     @GameTest
     public static void aDatapackCanSwapTheTemplateItemWithoutRegisteringAnItem(final GameTestHelper helper) {
         final TemplateService service = TemplateService.getInstance();
         final List<TemplateDefinition> declaredBefore = service.declaredTemplates();
         final TierDefinition common = GameTestTiers.tier(helper, TierDomain.WEAPON, "common");
         try {
-            service.replaceAll(List.of(new TemplateDefinition(
-                    new ResourceLocation(TieredEchoes.MOD_ID, "custom_common_upgrade"),
-                    common.id(),
-                    false,
-                    Optional.of(new ResourceLocation("minecraft", "nether_star")),
-                    Optional.empty(),
-                    Optional.empty())));
+            service.replaceAll(List.of(
+                    new TemplateDefinition(
+                            new ResourceLocation(TieredEchoes.MOD_ID, "custom_common_upgrade"),
+                            common.id(),
+                            false,
+                            Optional.of(new ResourceLocation("minecraft", "nether_star")),
+                            Optional.empty(),
+                            Optional.empty()),
+                    new TemplateDefinition(
+                            new ResourceLocation(TieredEchoes.MOD_ID, "custom_common_downgrade"),
+                            common.id(),
+                            true,
+                            Optional.of(new ResourceLocation("minecraft", "netherite_ingot")),
+                            Optional.empty(),
+                            Optional.empty())));
 
             helper.assertTrue(service.templateItem(common, false).filter(Items.NETHER_STAR::equals).isPresent(),
                     "a tier_templates declaration should win over the registered fallback item");
-            helper.assertTrue(service.templateItem(common, true).isPresent(),
-                    "declaring one direction must not remove the other");
+            helper.assertTrue(service.templateItem(common, true).filter(Items.NETHERITE_INGOT::equals).isPresent(),
+                    "a datapack may still declare the downward direction even though none is shipped");
         } finally {
             service.replaceAll(declaredBefore);
         }

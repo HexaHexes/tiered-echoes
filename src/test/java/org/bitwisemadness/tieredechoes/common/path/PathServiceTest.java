@@ -41,11 +41,11 @@ class PathServiceTest {
     void shippedLadderCoversEveryStepOfEveryBuiltInDomain() {
         final List<TierEdge> edges = ShippedDatapack.load().edges();
 
-        assertEquals(TierDomain.builtinDomains().size() * 3, edges.size());
+        assertEquals(TierDomain.builtinDomains().size() * 4, edges.size());
         for (final TierDomain domain : TierDomain.builtinDomains()) {
-            assertEquals(3, edges.stream().filter(edge -> edge.domain() == domain).count(), domain.toString());
-            assertTrue(edges.stream().allMatch(edge -> edge.downgradeTo().isPresent()),
-                    "every shipped step should be reversible");
+            assertEquals(4, edges.stream().filter(edge -> edge.domain() == domain).count(), domain.toString());
+            assertTrue(edges.stream().noneMatch(edge -> edge.downgradeTo().isPresent()),
+                    "no shipped step is reversible while downgrades are disabled");
         }
     }
 
@@ -82,8 +82,17 @@ class PathServiceTest {
         assertEquals(Optional.empty(), this.service.getDowngradeEdge(TestTiers.id("common"), TierDomain.WEAPON));
     }
 
+    /**
+     * A stale attunement is ignored rather than honoured or fatal.
+     *
+     * <p>Branch selection is disabled pending a rework, so nothing ever writes a
+     * {@code selected_branch_id} any more. Items upgraded before the change still carry one though,
+     * and the field stays in the packet and the NBT for that reason — the point of this assertion is
+     * that such an item upgrades normally instead of being locked out by a selection no edge can
+     * match any more.</p>
+     */
     @Test
-    void anUnselectedItemSeesEveryBranchAndASelectedOneSeesOnlyItsOwn() {
+    void aStaleBranchSelectionIsIgnoredRatherThanHonouredOrFatal() {
         this.service.replaceAll(List.of(
                 TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1, Optional.empty(), Optional.empty(),
                         Optional.of("branch_a")),
@@ -91,9 +100,10 @@ class PathServiceTest {
                         Optional.of("branch_b"))));
 
         assertEquals(2, this.service.resolveNextEdges(TestTiers.id("common"), TierDomain.WEAPON, Optional.empty()).size());
-        assertEquals(1, this.service.resolveNextEdges(TestTiers.id("common"), TierDomain.WEAPON, Optional.of("branch_b")).size());
-        assertTrue(this.service.resolveNextEdges(TestTiers.id("common"), TierDomain.WEAPON, Optional.of("stale")).isEmpty(),
-                "an attunement left over from a removed path must not resolve to some other branch");
+        assertEquals(2, this.service.resolveNextEdges(TestTiers.id("common"), TierDomain.WEAPON, Optional.of("branch_b")).size(),
+                "a selection must not narrow the choice while selection is disabled");
+        assertEquals(2, this.service.resolveNextEdges(TestTiers.id("common"), TierDomain.WEAPON, Optional.of("stale")).size(),
+                "an attunement left over from an older build must not lock an item out of upgrading");
     }
 
     @Test
@@ -205,7 +215,7 @@ class PathServiceTest {
         assertEquals(0, report.errorCount(), () -> describe(report));
         assertEquals(0, report.warningCount(), () -> describe(report));
         assertFalse(report.hasErrors());
-        assertEquals(TierDomain.builtinDomains().size() * 3, this.service.getAllEdgesLike().size(),
-                "the shipped graph is one domain of three linear steps per built-in domain, with built-in duplicates dropped");
+        assertEquals(TierDomain.builtinDomains().size() * 4, this.service.getAllEdgesLike().size(),
+                "the shipped graph is one domain of four linear steps per built-in domain, with built-in duplicates dropped");
     }
 }

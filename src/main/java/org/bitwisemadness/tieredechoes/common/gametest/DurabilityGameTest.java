@@ -26,22 +26,27 @@ public final class DurabilityGameTest {
     }
 
     @GameTest
-    public static void aTieredShieldOutlivesAnUntieredOne(final GameTestHelper helper) {
-        final TierDefinition uncommon = GameTestTiers.tier(helper, TierDomain.SHIELD, "uncommon");
-        final ItemStack tiered = GameTestTiers.tieredItem(helper, TierDomain.SHIELD, Items.SHIELD, "uncommon");
-        final int base = new ItemStack(Items.SHIELD).getMaxDamage();
+    public static void aTieredArmorOutlivesAnUntieredOne(final GameTestHelper helper) {
+        final TierDefinition uncommon = GameTestTiers.tier(helper, TierDomain.ARMOR, "uncommon");
+        final ItemStack tiered = GameTestTiers.tieredItem(helper, TierDomain.ARMOR, Items.LEATHER_CHESTPLATE, "uncommon");
+        final int base = new ItemStack(Items.LEATHER_CHESTPLATE).getMaxDamage();
 
         final double multiplier = TierService.getInstance()
                 .getScalarMultiplier(uncommon, "durability").orElseThrow();
         final int expected = Math.max(1, (int) Math.round(base * multiplier));
 
         helper.assertTrue(tiered.getMaxDamage() > base,
-                "a tiered shield should outlast a plain one, but got " + tiered.getMaxDamage() + " against " + base);
+                "a tiered armor piece should outlast a plain one, but got " + tiered.getMaxDamage() + " against " + base);
         helper.assertTrue(tiered.getMaxDamage() == expected,
                 "expected " + expected + " durability (base " + base + " x " + multiplier + ") but got " + tiered.getMaxDamage());
         helper.succeed();
     }
 
+    /**
+     * A shield now carries no ladder at all, which makes it the plainest possible case: an item the
+     * mod recognises as nothing in particular must be left entirely alone, not merely given a
+     * multiplier of one.
+     */
     @GameTest
     public static void anUntieredItemKeepsItsOriginalDurability(final GameTestHelper helper) {
         final ItemStack plain = new ItemStack(Items.SHIELD);
@@ -55,15 +60,16 @@ public final class DurabilityGameTest {
     }
 
     /**
-     * The elytra scales on the same read site as a shield. It is in the test because it was the domain
-     * that had to be added a ladder for, and because a durability-only domain is exactly the case the
-     * {@code durability}-keyed multiplier table exists to serve.
+     * The elytra was the durability-only domain, and it is here because a durability-only case is
+     * exactly what the {@code durability}-keyed multiplier table exists to serve. It is exercised
+     * through a tool now rather than through the elytra itself: shields and elytras ship no ladder
+     * any more, so the elytra would have no tier to look up. The read site is the same either way.
      */
     @GameTest
-    public static void aTieredElytraOutlivesAnUntieredOne(final GameTestHelper helper) {
-        final TierDefinition rare = GameTestTiers.tier(helper, TierDomain.ELYTRA, "rare");
-        final ItemStack tiered = GameTestTiers.tieredItem(helper, TierDomain.ELYTRA, Items.ELYTRA, "rare");
-        final int base = new ItemStack(Items.ELYTRA).getMaxDamage();
+    public static void aTieredToolOutlivesAnUntieredOne(final GameTestHelper helper) {
+        final TierDefinition rare = GameTestTiers.tier(helper, TierDomain.TOOL, "rare");
+        final ItemStack tiered = GameTestTiers.tieredItem(helper, TierDomain.TOOL, Items.IRON_PICKAXE, "rare");
+        final int base = new ItemStack(Items.IRON_PICKAXE).getMaxDamage();
 
         final double multiplier = TierService.getInstance()
                 .getScalarMultiplier(rare, "durability").orElseThrow();
@@ -81,17 +87,17 @@ public final class DurabilityGameTest {
      */
     @GameTest
     public static void tieringDoesNotRepairDamageAlreadyTaken(final GameTestHelper helper) {
-        final ItemStack damaged = new ItemStack(Items.SHIELD);
+        final ItemStack damaged = new ItemStack(Items.IRON_CHESTPLATE);
         damaged.setDamageValue(100);
         final int damageBefore = damaged.getDamageValue();
 
         final ItemStack tiered = UpgradeService.getInstance()
-                .applyTier(damaged, GameTestTiers.tier(helper, TierDomain.SHIELD, "epic"));
+                .applyTier(damaged, GameTestTiers.tier(helper, TierDomain.ARMOR, "epic"));
 
         helper.assertTrue(tiered.getDamageValue() == damageBefore,
                 "tiering repaired the stack: damage went from " + damageBefore + " to " + tiered.getDamageValue());
         helper.assertTrue(tiered.getMaxDamage() > damaged.getMaxDamage(),
-                "an epic shield should have a higher maximum than the base " + damaged.getMaxDamage());
+                "an epic chestplate should have a higher maximum than the base " + damaged.getMaxDamage());
         helper.succeed();
     }
 

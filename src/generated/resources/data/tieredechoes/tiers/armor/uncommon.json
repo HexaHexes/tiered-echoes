@@ -13,17 +13,11 @@
     "thermal_resistance": 1.12
   },
   "compat_amplifiers": {},
-  "curios_set_bonuses": {
-    "*2": 1.07,
-    "*3": 1.1
-  },
+  "curios_set_bonuses": {},
   "display_rarity": "UNCOMMON",
   "domain": "armor",
-  "downgrade_ingredient": {
-    "item": "minecraft:cobblestone"
-  },
-  "experience_required": 25,
-  "generated_downgrade_template": true,
+  "experience_required": 200,
+  "generated_downgrade_template": false,
   "generated_upgrade_template": true,
   "id": "tieredechoes:uncommon",
   "previous_tier": "tieredechoes:common",

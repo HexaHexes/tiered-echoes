@@ -23,8 +23,8 @@ game actually loads:
 src/generated/resources/data/tieredechoes/
     tiers/<domain>/<tier>.json
     tier_paths/<domain>/linear.json
-    tier_templates/<tier>_<upgrade|downgrade>_template.json
-    recipes/templates/<tier>_<upgrade|downgrade>_template_copy.json
+    tier_templates/<tier>_upgrade_template.json
+    recipes/templates/<tier>_upgrade_template_copy.json
 ```
 
 That directory is committed and ships in the jar. It is not a cache, it is the mod's built-in

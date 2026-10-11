@@ -6,30 +6,36 @@
         "item": "minecraft:iron_ingot"
       },
       "display_branch_id": "weapon_common_to_uncommon",
-      "downgrade_to": "tieredechoes:common",
       "from": "tieredechoes:common",
       "schema_version": 1,
       "to": "tieredechoes:uncommon"
     },
     {
       "attunement_ingredient": {
-        "item": "minecraft:diamond"
+        "item": "minecraft:gold_ingot"
       },
       "display_branch_id": "weapon_uncommon_to_rare",
-      "downgrade_to": "tieredechoes:uncommon",
       "from": "tieredechoes:uncommon",
       "schema_version": 1,
       "to": "tieredechoes:rare"
     },
     {
       "attunement_ingredient": {
-        "item": "minecraft:netherite_ingot"
+        "item": "minecraft:diamond"
       },
       "display_branch_id": "weapon_rare_to_epic",
-      "downgrade_to": "tieredechoes:rare",
       "from": "tieredechoes:rare",
       "schema_version": 1,
       "to": "tieredechoes:epic"
+    },
+    {
+      "attunement_ingredient": {
+        "item": "minecraft:netherite_ingot"
+      },
+      "display_branch_id": "weapon_epic_to_legendary",
+      "from": "tieredechoes:epic",
+      "schema_version": 1,
+      "to": "tieredechoes:legendary"
     }
   ],
   "id": "tieredechoes:weapon_linear",

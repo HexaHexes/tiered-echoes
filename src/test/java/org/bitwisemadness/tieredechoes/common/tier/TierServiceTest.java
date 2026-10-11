@@ -38,13 +38,13 @@ class TierServiceTest {
     }
 
     @Test
-    void shippedLadderGivesEveryBuiltinDomainAFourStepLadder() {
+    void shippedLadderGivesEveryBuiltinDomainAFiveRungLadder() {
         final List<TierDefinition> shipped = ShippedDatapack.load().tiers();
 
-        assertEquals(TierDomain.builtinDomains().size() * 4, shipped.size());
+        assertEquals(TierDomain.builtinDomains().size() * 5, shipped.size());
         for (final TierDomain domain : TierDomain.builtinDomains()) {
             final List<TierDefinition> forDomain = shipped.stream().filter(tier -> tier.domain() == domain).toList();
-            assertEquals(4, forDomain.size(), domain + " should ship common/uncommon/rare/epic");
+            assertEquals(5, forDomain.size(), domain + " should ship common through legendary");
         }
     }
 
@@ -176,8 +176,16 @@ class TierServiceTest {
         assertEquals(Optional.empty(), this.service.resolveCurrentTier(stack, null));
     }
 
+    /**
+     * Being in the tag is not the same as being on the ladder.
+     *
+     * <p>This used to assert the opposite — that a fresh iron sword read as {@code common} because
+     * the first rung was the fallback. Removing that fallback is what makes "untiered" observable: an
+     * item scales nothing, shows no bracket and costs copper, or the first rung's experience, to
+     * join the ladder. It is also the precondition the bootstrap recipe exists to satisfy.</p>
+     */
     @Test
-    void anUntieredStackFallsBackToTheFirstTierTheItemCanCarry() {
+    void anItemInATagWithNothingRecordedIsTierlessRatherThanDefaultingToTheFirstRung() {
         this.service.replaceAll(List.of(
                 TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
                 TestTiers.tier("uncommon", TierDomain.WEAPON, 1, 25)));
@@ -185,7 +193,9 @@ class TierServiceTest {
 
         final Optional<TierDefinition> tier = this.service.resolveCurrentTier(new ItemStack(Items.IRON_SWORD), null);
 
-        assertEquals(TestTiers.id("common"), tier.orElseThrow().id());
+        assertTrue(tier.isEmpty(), "an iron sword with nothing recorded is untiered, not common");
+        assertTrue(this.service.resolveCurrentTier(new ItemStack(Items.IRON_SWORD), TierDomain.WEAPON).isEmpty(),
+                "the scoped lookup must agree with the unscoped one");
     }
 
     /**
@@ -245,10 +255,10 @@ class TierServiceTest {
 
         for (final TierDomain domain : TierDomain.builtinDomains()) {
             final List<TierDefinition> ordered = this.service.getOrderedTiers(domain);
-            assertEquals(List.of("common", "uncommon", "rare", "epic"),
+            assertEquals(List.of("common", "uncommon", "rare", "epic", "legendary"),
                     ordered.stream().map(tier -> tier.id().getPath()).toList(), domain.toString());
         }
-        assertEquals(TierDomain.builtinDomains().size() * 4, this.service.getAllTiers().size());
+        assertEquals(TierDomain.builtinDomains().size() * 5, this.service.getAllTiers().size());
         assertEquals(new ResourceLocation("tieredechoes", "common"),
                 this.service.getTier(new ResourceLocation("tieredechoes", "common"), TierDomain.TOOL).orElseThrow().id());
     }

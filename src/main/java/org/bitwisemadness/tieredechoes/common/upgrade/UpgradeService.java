@@ -12,6 +12,7 @@ import org.bitwisemadness.tieredechoes.common.path.PathService;
 import org.bitwisemadness.tieredechoes.common.path.TierEdge;
 import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
 import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
+import org.bitwisemadness.tieredechoes.common.recipe.TierBootstrapRecipe;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
@@ -64,38 +65,17 @@ public final class UpgradeService implements IUpgradeService {
         return copy;
     }
 
+    /**
+     * Disabled pending a rework of how the way down should be expressed.
+     *
+     * <p>Returns the stack unchanged rather than throwing, because a caller that has not learned the
+     * feature is gone should not take the game with it. No downgrade template is registered and no
+     * downgrade recipe is generated, so nothing in ordinary play reaches this — it exists as the
+     * seam the rework will reopen.</p>
+     */
     @Override
     public ItemStack downgrade(final ItemStack stack, final TierDomain domain) {
-        final Optional<TierDefinition> current = this.getCurrentTier(stack, domain);
-        if (current.isEmpty()) {
-            return stack.copy();
-        }
-        final List<TierEdge> incoming = PathService.getInstance().getIncomingEdges(current.get().id(), domain);
-        final Optional<String> selectedBranch = this.getSelectedBranchId(stack, domain);
-        TierEdge chosen = null;
-        if (selectedBranch.isPresent()) {
-            chosen = incoming.stream()
-                    .filter(edge -> PathService.getInstance().effectiveBranchId(edge).equals(selectedBranch.get()))
-                    .min(Comparator.comparingInt(TierEdge::registrationOrder))
-                    .orElse(null);
-        }
-        if (chosen == null) {
-            chosen = incoming.stream().min(Comparator.comparingInt(TierEdge::registrationOrder)).orElse(null);
-        }
-        if (chosen == null) {
-            return stack.copy();
-        }
-        final Optional<TierDefinition> previous = TierService.getInstance().getTier(chosen.downgradeTo().orElse(chosen.from()), domain);
-        if (previous.isEmpty()) {
-            return stack.copy();
-        }
-        final ItemStack copy = stack.copy();
-        final int xp = this.getStoredExperience(copy, domain);
-        this.writeTierState(copy, previous.get(), false);
-        this.setStoredExperience(copy, domain, xp);
-        this.clearSelectedBranch(copy, domain);
-        this.refreshArsThreadSlotBonus(copy);
-        return copy;
+        return stack.copy();
     }
 
     /**
@@ -145,34 +125,23 @@ public final class UpgradeService implements IUpgradeService {
                 : recorded;
     }
 
+    /**
+     * Disabled pending a rework of branching.
+     *
+     * <p>Always returns false and writes nothing. The shipped ladder is linear, so there is no branch
+     * to select in ordinary play; leaving attunement live would mean an off-hand item silently
+     * recording a {@code selected_branch_id} that no edge can ever match, which reads as a bug long
+     * before the rework lands.</p>
+     */
     public boolean attuneStack(final ItemStack mainHand, final ItemStack offhand) {
-        boolean attuned = false;
-        for (final TierDomain domain : this.ladderDomains(mainHand)) {
-            attuned |= this.attuneStack(mainHand, offhand, domain);
-        }
-        return attuned;
+        return false;
     }
 
     /**
-     * Attunes one ladder against the off-hand item. Returns false when this domain has no rung stored
-     * or the off-hand selects no edge out of it, so a multi-domain item only records the ladders the
-     * off-hand actually spoke to.
+     * Disabled pending a rework of branching. See {@link #attuneStack(ItemStack, ItemStack)}.
      */
     public boolean attuneStack(final ItemStack mainHand, final ItemStack offhand, final TierDomain domain) {
-        final Optional<TierDefinition> current = this.getCurrentTier(mainHand, domain);
-        if (current.isEmpty()) {
-            return false;
-        }
-        final Optional<TierEdge> edge = PathService.getInstance()
-                .resolveAttunementEdge(current.get().id(), domain, offhand);
-        if (edge.isEmpty()) {
-            return false;
-        }
-        final CompoundTag domainTag = this.domainTag(mainHand, domain);
-        domainTag.putString("selected_branch_id", PathService.getInstance().effectiveBranchId(edge.get()));
-        domainTag.putString("selected_branch_target", edge.get().to().toString());
-        domainTag.putString("selected_branch_source", current.get().id().toString());
-        return true;
+        return false;
     }
 
     /**
@@ -260,7 +229,7 @@ public final class UpgradeService implements IUpgradeService {
         }
         final Optional<TierDefinition> current = this.getCurrentTier(stack, domain);
         if (current.isEmpty() || current.get().domain() != domain) {
-            return Optional.empty();
+            return this.tryBootstrap(stack, domain, rules);
         }
         final Optional<String> selectedBranch = this.getSelectedBranchId(stack, domain);
         final List<TierEdge> nextEdges = new ArrayList<>(PathService.getInstance().resolveNextEdges(current.get().id(), domain, selectedBranch));
@@ -278,7 +247,8 @@ public final class UpgradeService implements IUpgradeService {
             if (currentXp < required) {
                 return Optional.empty();
             }
-            return Optional.of(this.finishUpgrade(stack, target, edge, required, rules));
+            return Optional.of(this.finishUpgrade(stack, target,
+                    PathService.getInstance().effectiveBranchId(edge), required, rules));
         }
         final List<TierEdge> eligible = new ArrayList<>();
         for (final TierEdge edge : nextEdges) {
@@ -308,11 +278,35 @@ public final class UpgradeService implements IUpgradeService {
             return Optional.empty();
         }
         final int required = chosen.effectiveExperienceRequirement(target.experienceRequired());
-        return Optional.of(this.finishUpgrade(stack, target, chosen, required, rules));
+        return Optional.of(this.finishUpgrade(stack, target,
+                PathService.getInstance().effectiveBranchId(chosen), required, rules));
     }
 
-    private ItemStack finishUpgrade(final ItemStack stack, final TierDefinition target,
-                                    final TierEdge chosen, final int requiredXp, final ProgressionRules rules) {
+    /**
+     * The climb from untiered onto the ladder's first rung.
+     *
+     * <p>Experience reaches an item before any rung is written — a sword banks weapon experience from
+     * its first kill and has nothing to spend it on until it is on the ladder. Without this branch
+     * that experience would accumulate forever, because there is no edge out of "untiered" for the
+     * normal walk to follow. The path graph deliberately says nothing about this step: it describes
+     * transitions between rungs, and joining the ladder is not one. So the first rung's own
+     * experience requirement is the whole of the gate.</p>
+     */
+    private Optional<ItemStack> tryBootstrap(final ItemStack stack, final TierDomain domain, final ProgressionRules rules) {
+        final TierDefinition target = TierService.getInstance()
+                .getOrderedTiers(domain).stream().findFirst().orElse(null);
+        if (target == null || target.domain() != domain) {
+            return Optional.empty();
+        }
+        final int required = target.experienceRequired();
+        if (this.getStoredExperience(stack, domain) < required) {
+            return Optional.empty();
+        }
+        return Optional.of(this.finishUpgrade(stack, target, TierBootstrapRecipe.UNTIERED.toString(), required, rules));
+    }
+
+    private ItemStack finishUpgrade(final ItemStack stack, final TierDefinition target, final String branchId,
+                                    final int requiredXp, final ProgressionRules rules) {
         final ItemStack copy = stack.copy();
         final TierDomain domain = target.domain();
         final int currentXp = this.getStoredExperience(copy, domain);
@@ -326,7 +320,7 @@ public final class UpgradeService implements IUpgradeService {
         this.writeTierState(copy, target, false);
         this.setStoredExperience(copy, domain, remainder);
         this.clearSelectedBranch(copy, domain);
-        this.domainTag(copy, domain).putString("last_branch_id", PathService.getInstance().effectiveBranchId(chosen));
+        this.domainTag(copy, domain).putString("last_branch_id", branchId);
         this.refreshArsThreadSlotBonus(copy);
         return copy;
     }

@@ -41,8 +41,16 @@ public final class TieredEchoesTagKeys {
             TierDomain.ELYTRA, "elytra",
             TierDomain.ACCESSORY, "accessories");
 
+    /**
+     * Every domain gets its mapping, not just the ones that ship a ladder.
+     *
+     * <p>{@link TierDomain#builtinDomains()} decides what the mod generates; this map decides what a
+     * datapack is able to say. Restricting it to the built-ins would mean a pack could not even name
+     * the shield tag, because the {@code TagKey} would not exist to resolve against — and a domain
+     * with no tag is a domain nothing can ever join, however carefully the pack is written.</p>
+     */
     static {
-        for (final TierDomain domain : TierDomain.builtinDomains()) {
+        for (final TierDomain domain : TierDomain.values()) {
             final String path = TAG_PATHS.get(domain);
             if (path == null) {
                 throw new IllegalStateException("TierDomain " + domain + " has no item tag path");
