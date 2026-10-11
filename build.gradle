@@ -215,3 +215,19 @@ tasks.named('test', Test).configure {
         exceptionFormat 'full'
     }
 }
+
+/**
+ * Writes the empty .nbt templates that the GameTests are named after.
+ *
+ * A missing template crashes the game test server before a single test runs, so this is the
+ * fix for the failure GameTestStructuresTest reports. Ids are read by the same class the test
+ * reads them from, so a renamed test cannot leave the two disagreeing.
+ */
+tasks.register('generateGameTestStructures', JavaExec) {
+    group = 'verification'
+    description = 'Writes the empty .nbt structure templates that the GameTests are named after.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass.set('org.bitwisemadness.tieredechoes.common.gametest.GameTestStructureGenerator')
+    args(projectDir.absolutePath,
+            file('src/main/resources/data/tieredechoes/structures').absolutePath)
+}

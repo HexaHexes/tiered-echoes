@@ -8,8 +8,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -20,34 +18,36 @@ import static org.junit.jupiter.api.Assertions.fail;
  * "a test was renamed".
  *
  * <p>Caught here instead, where the message can say exactly what to regenerate.</p>
+ *
+ * <p>Ids come from {@link GameTestStructureGenerator} rather than from a pattern of this test's
+ * own. The two used to carry separate copies of the same regex, which is the drift this file
+ * exists to catch, reintroduced by the tool that fixes it.</p>
  */
 class GameTestStructuresTest {
 
-    private static final Pattern CLASS_DECLARATION =
-            Pattern.compile("^\\s*public\\s+(?:final\\s+)?class\\s+(\\w+)", Pattern.MULTILINE);
-    private static final Pattern GAME_TEST_METHOD =
-            Pattern.compile("@GameTest(?:\\s*\\([^)]*\\))?\\s+(?:public\\s+)?static\\s+void\\s+(\\w+)");
+    private static final String REGENERATE = "Run: gradlew generateGameTestStructures";
 
     @Test
     void everyGameTestMethodHasAStructureTemplate() throws IOException {
         final List<String> missing = new ArrayList<>();
 
-        for (final GameTestRecord test : discoveredTests()) {
-            if (!Files.isRegularFile(structuresRoot().resolve(test.id + ".nbt"))) {
-                missing.add(test.id + ".nbt");
+        for (final String id : GameTestStructureGenerator.discoverStructureIds(projectRoot())) {
+            if (!Files.isRegularFile(structuresRoot().resolve(id + ".nbt"))) {
+                missing.add(id + ".nbt");
             }
         }
 
         if (!missing.isEmpty()) {
             fail("Missing GameTest structure templates:\n  " + String.join("\n  ", missing)
-                    + "\nRun: pwsh tools/generate-gametest-structures.ps1");
+                    + "\n" + REGENERATE);
         }
     }
 
     /** Guards the opposite drift: a template left behind by a test that no longer exists. */
     @Test
     void everyStructureTemplateBelongsToAnExistingGameTest() throws IOException {
-        final List<String> ids = discoveredTests().stream().map(test -> test.id).toList();
+        final List<String> ids =
+                GameTestStructureGenerator.discoverStructureIds(projectRoot()).stream().toList();
         assertFalse(ids.isEmpty(), "no @GameTest methods were discovered; the scan itself has broken");
 
         final Path structures = structuresRoot();
@@ -65,39 +65,7 @@ class GameTestStructuresTest {
 
         assertFalse(!stale.isEmpty(),
                 "Structure templates with no matching test: " + stale
-                        + "\nRun: pwsh tools/generate-gametest-structures.ps1");
-    }
-
-    private record GameTestRecord(String id) {
-    }
-
-    private static List<GameTestRecord> discoveredTests() throws IOException {
-        final List<GameTestRecord> tests = new ArrayList<>();
-        for (final Path source : gameTestSources()) {
-            final Matcher classMatcher = CLASS_DECLARATION.matcher(Files.readString(source));
-            if (!classMatcher.find()) {
-                continue;
-            }
-            final String className = classMatcher.group(1).toLowerCase();
-            final Matcher methods = GAME_TEST_METHOD.matcher(Files.readString(source));
-            while (methods.find()) {
-                tests.add(new GameTestRecord(className + "." + methods.group(1).toLowerCase()));
-            }
-        }
-        return tests;
-    }
-
-    private static List<Path> gameTestSources() throws IOException {
-        final Path packageDir = projectRoot()
-                .resolve("src").resolve("main").resolve("java")
-                .resolve("org").resolve("bitwisemadness").resolve("tieredechoes")
-                .resolve("common").resolve("gametest");
-        if (!Files.isDirectory(packageDir)) {
-            return List.of();
-        }
-        try (var files = Files.list(packageDir)) {
-            return files.filter(path -> path.getFileName().toString().endsWith(".java")).toList();
-        }
+                        + "\n" + REGENERATE);
     }
 
     private static Path structuresRoot() {
