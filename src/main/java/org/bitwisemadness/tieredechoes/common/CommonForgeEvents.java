@@ -18,6 +18,7 @@ import org.bitwisemadness.tieredechoes.common.experience.ExperienceTooltip;
 import org.bitwisemadness.tieredechoes.common.network.client.DisplayEdge;
 import org.bitwisemadness.tieredechoes.common.network.client.SyncedProgressionState;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
+import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
 import org.bitwisemadness.tieredechoes.common.upgrade.UpgradeService;
 
@@ -39,20 +40,19 @@ public final class CommonForgeEvents {
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onItemAttributeModifiers(final ItemAttributeModifierEvent event) {
         final ItemStack stack = event.getItemStack();
-        final var tierOpt = UpgradeService.getInstance().getCurrentTier(stack);
-        if (tierOpt.isEmpty()) return;
-        final TierDefinition tier = tierOpt.get();
         final Set<Attribute> presentAttributes = new LinkedHashSet<>(event.getModifiers().keySet());
         int scaled = 0;
         for (final Attribute attribute : presentAttributes) {
-            final java.util.Optional<Double> multiplier = TierService.getInstance().getAttributeMultiplier(tier, attribute);
+            // The multiplier is resolved across every ladder the item climbs, so an axe's weapon rung
+            // and tool rung both get to state a modifier for the attributes they own.
+            final java.util.Optional<Double> multiplier = TierService.getInstance().getAttributeMultiplier(stack, attribute);
             if (multiplier.isPresent()) {
-                scaled += applyScaledItemModifier(event, tier, attribute, multiplier.get());
+                scaled += applyScaledItemModifier(event, stack, attribute, multiplier.get());
             } else {
                 logUnrecognizedModdedAttribute(stack, attribute);
             }
         }
-        TieredEchoes.LOGGER.debug("[CommonForgeEvents] Item attribute event processed for {} tier {} slot {} presentAttributes={} scaled={}", stack.getItem(), tier.id(), event.getSlotType(), presentAttributes, scaled);
+        TieredEchoes.LOGGER.debug("[CommonForgeEvents] Item attribute event processed for {} slot {} presentAttributes={} scaled={}", stack.getItem(), event.getSlotType(), presentAttributes, scaled);
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
@@ -65,10 +65,6 @@ public final class CommonForgeEvents {
             TieredEchoes.LOGGER.debug("[CommonForgeEvents] CurioAttributeModifierEvent seen, but no ItemStack accessor was found on {}", event.getClass().getName());
             return;
         }
-        final var tierOpt = UpgradeService.getInstance().getCurrentTier(stack);
-        if (tierOpt.isEmpty()) {
-            return;
-        }
         final Object modifiers = invokeNoArg(event, "getModifiers");
         if (!(modifiers instanceof Multimap<?, ?> rawMap)) {
             TieredEchoes.LOGGER.debug("[CommonForgeEvents] CurioAttributeModifierEvent for {} did not expose a Guava Multimap through getModifiers()", stack.getItem());
@@ -76,11 +72,11 @@ public final class CommonForgeEvents {
         }
         @SuppressWarnings("unchecked")
         final Multimap<Attribute, AttributeModifier> map = (Multimap<Attribute, AttributeModifier>) rawMap;
-        final int scaled = applyScaledMultimapModifiers(event, stack, tierOpt.get(), map, "Curios");
-        TieredEchoes.LOGGER.debug("[CommonForgeEvents] Curios attribute event processed for {} tier {} scaled={}", stack.getItem(), tierOpt.get().id(), scaled);
+        final int scaled = applyScaledMultimapModifiers(event, stack, map, "Curios");
+        TieredEchoes.LOGGER.debug("[CommonForgeEvents] Curios attribute event processed for {} scaled={}", stack.getItem(), scaled);
     }
 
-    private static int applyScaledItemModifier(final ItemAttributeModifierEvent event, final TierDefinition tier, final Attribute attribute, final double multiplier) {
+    private static int applyScaledItemModifier(final ItemAttributeModifierEvent event, final ItemStack stack, final Attribute attribute, final double multiplier) {
         if (multiplier == 1.0D) {
             return 0;
         }
@@ -94,16 +90,16 @@ public final class CommonForgeEvents {
             event.removeModifier(attribute, modifier);
             event.addModifier(attribute, replacement);
             scaled++;
-            TieredEchoes.LOGGER.debug("[CommonForgeEvents] Scaled item attribute {} from {} to {} via {}", attribute.getDescriptionId(), modifier.getAmount(), replacement.getAmount(), tier.id());
+            TieredEchoes.LOGGER.debug("[CommonForgeEvents] Scaled item attribute {} from {} to {} via x{}", attribute.getDescriptionId(), modifier.getAmount(), replacement.getAmount(), multiplier);
         }
         return scaled;
     }
 
-    private static int applyScaledMultimapModifiers(final Event event, final ItemStack stack, final TierDefinition tier, final Multimap<Attribute, AttributeModifier> modifiers, final String source) {
+    private static int applyScaledMultimapModifiers(final Event event, final ItemStack stack, final Multimap<Attribute, AttributeModifier> modifiers, final String source) {
         int scaled = 0;
         final Set<Attribute> presentAttributes = new LinkedHashSet<>(modifiers.keySet());
         for (final Attribute attribute : presentAttributes) {
-            final java.util.Optional<Double> multiplierOpt = TierService.getInstance().getAttributeMultiplier(tier, attribute);
+            final java.util.Optional<Double> multiplierOpt = TierService.getInstance().getAttributeMultiplier(stack, attribute);
             if (multiplierOpt.isEmpty()) {
                 logUnrecognizedModdedAttribute(stack, attribute);
                 continue;
@@ -114,13 +110,13 @@ public final class CommonForgeEvents {
             }
             final List<AttributeModifier> existing = List.copyOf(modifiers.get(attribute));
             for (final AttributeModifier modifier : existing) {
-                final AttributeModifier extra = additiveScaledExtra(modifier, multiplier, tier, attribute.getDescriptionId(), source);
+                final AttributeModifier extra = additiveScaledExtra(modifier, multiplier, attribute.getDescriptionId(), source);
                 if (extra == null) {
                     continue;
                 }
                 if (addCurioModifier(event, attribute, extra)) {
                     scaled++;
-                    TieredEchoes.LOGGER.debug("[CommonForgeEvents] Added {} scaling modifier for {} base {} extra {} via {}", source, attribute.getDescriptionId(), modifier.getAmount(), extra.getAmount(), tier.id());
+                    TieredEchoes.LOGGER.debug("[CommonForgeEvents] Added {} scaling modifier for {} base {} extra {} via x{}", source, attribute.getDescriptionId(), modifier.getAmount(), extra.getAmount(), multiplier);
                 } else {
                     TieredEchoes.LOGGER.warn("[CommonForgeEvents] Could not add {} scaling modifier for {} on {} because {} exposes an unmodifiable modifier map and no supported addModifier API was found", source, attribute.getDescriptionId(), stack.getItem(), event.getClass().getName());
                 }
@@ -130,7 +126,7 @@ public final class CommonForgeEvents {
     }
 
 
-    private static AttributeModifier additiveScaledExtra(final AttributeModifier modifier, final double multiplier, final TierDefinition tier, final String key, final String source) {
+    private static AttributeModifier additiveScaledExtra(final AttributeModifier modifier, final double multiplier, final String key, final String source) {
         if (modifier.getName().contains(TIERED_ECHOES_MARKER)) {
             return null;
         }
@@ -138,7 +134,11 @@ public final class CommonForgeEvents {
         if (Math.abs(extraAmount) < 1.0E-9D) {
             return null;
         }
-        final UUID id = UUID.nameUUIDFromBytes(("tieredechoes:" + source + ':' + tier.id() + ':' + key + ':' + modifier.getId()).getBytes(StandardCharsets.UTF_8));
+        // The seed includes the multiplier rather than a tier id, because the multiplier is now
+        // resolved across every ladder the item climbs and no single tier owns it. Two different
+        // scale factors still produce two different ids, so a retiered item replaces rather than
+        // accumulates its scaling modifier.
+        final UUID id = UUID.nameUUIDFromBytes(("tieredechoes:" + source + ':' + multiplier + ':' + key + ':' + modifier.getId()).getBytes(StandardCharsets.UTF_8));
         return new AttributeModifier(id, modifier.getName() + TIERED_ECHOES_MARKER, extraAmount, modifier.getOperation());
     }
 
@@ -199,13 +199,12 @@ public final class CommonForgeEvents {
         public static void onItemTooltip(final ItemTooltipEvent event) {
             final ItemStack stack = event.getItemStack();
             final UpgradeService upgrade = UpgradeService.getInstance();
-            final Optional<TierDefinition> tierOpt = upgrade.getCurrentTier(stack);
-            if (tierOpt.isEmpty()) {
+            final List<TierDomain> ladders = upgrade.ladderDomains(stack);
+            if (ladders.isEmpty()) {
                 return;
             }
-            final TierDefinition tier = tierOpt.get();
-            TieredEchoes.LOGGER.debug("[CommonForgeEvents] Tiered stack tooltip observed for {} tier {}",
-                    stack.getItem(), tier.id());
+            TieredEchoes.LOGGER.debug("[CommonForgeEvents] Tiered stack tooltip observed for {} ladders {}",
+                    stack.getItem(), ladders);
 
             // The gamerule is per-world and vanilla gives a client no way to read it, so the value
             // shown here arrived over the mod's own sync channel. See SyncedProgressionState.
@@ -213,22 +212,31 @@ public final class CommonForgeEvents {
                 return;
             }
 
-            final List<Integer> costs = new ArrayList<>(2);
-            for (final DisplayEdge edge : SyncedProgressionState.nextEdges(tier.id(), tier.domain())) {
-                final Optional<Integer> override = edge.experienceRequirementOverride();
-                if (override.isPresent()) {
-                    costs.add(override.get());
+            // An axe climbs both the weapon and the tool ladder, so it has two pools and two next
+            // thresholds. Each gets its own line: collapsing them to one would show a single number
+            // that belongs to neither ladder. A ladder the item has earned experience on but not yet
+            // been tiered still gets a line, because that experience is the progress it is sitting on.
+            for (final TierDomain domain : ladders) {
+                final TierDefinition tier = upgrade.getCurrentTier(stack, domain).orElse(null);
+                if (tier == null) {
                     continue;
                 }
-                // A target the datapack no longer defines is skipped rather than treated as free.
-                TierService.getInstance().getTier(edge.to(), edge.domain())
-                        .map(TierDefinition::experienceRequired)
-                        .ifPresent(costs::add);
+                final List<Integer> costs = new ArrayList<>(2);
+                for (final DisplayEdge edge : SyncedProgressionState.nextEdges(tier.id(), domain)) {
+                    final Optional<Integer> override = edge.experienceRequirementOverride();
+                    if (override.isPresent()) {
+                        costs.add(override.get());
+                        continue;
+                    }
+                    // A target the datapack no longer defines is skipped rather than treated as free.
+                    TierService.getInstance().getTier(edge.to(), edge.domain())
+                            .map(TierDefinition::experienceRequired)
+                            .ifPresent(costs::add);
+                }
+                ExperienceTooltip.nextThreshold(costs).ifPresent(threshold -> event.getToolTip().add(
+                        Component.literal(ExperienceTooltip.format(upgrade.getStoredExperience(stack, domain), threshold))
+                                .withStyle(ChatFormatting.DARK_GRAY)));
             }
-
-            ExperienceTooltip.nextThreshold(costs).ifPresent(threshold -> event.getToolTip().add(
-                    Component.literal(ExperienceTooltip.format(upgrade.getStoredExperience(stack), threshold))
-                            .withStyle(ChatFormatting.DARK_GRAY)));
         }
     }
 }

@@ -28,6 +28,16 @@ import java.util.Locale;
 
 public final class TierService implements ITierService {
     private static final TierService INSTANCE = new TierService();
+
+    /**
+     * The NBT keys naming the per-domain ladder state. Held here rather than inlined so the read
+     * site and {@code UpgradeService}'s write site cannot drift apart — a mismatch would show up as
+     * every tier silently failing to load.
+     */
+    public static final String ROOT_TAG = "TieredEchoes";
+    public static final String DOMAINS_TAG = "domains";
+    public static final String TIER_ID_TAG = "tier_id";
+
     private final Map<TierDomain, List<TierDefinition>> tiersByDomain = new EnumMap<>(TierDomain.class);
     private final Map<TierKey, TierDefinition> tiersByKey = new LinkedHashMap<>();
 
@@ -248,6 +258,46 @@ public final class TierService implements ITierService {
         return Optional.empty();
     }
 
+    /**
+     * The strongest scalar multiplier any of this stack's ladders declares for {@code key}.
+     *
+     * <p>An axe climbs both the weapon and the tool ladder, and both may declare a {@code durability}
+     * multiplier. Applying whichever one was iterated first would make the answer depend on map
+     * order, so the one furthest from {@code 1.0} wins: that is the ladder that actually changed the
+     * item, and the other is agreeing it did nothing.</p>
+     */
+    public synchronized Optional<Double> getScalarMultiplier(final ItemStack stack, final String key) {
+        return strongest(this.readAllTiersFromNbt(stack).values(),
+                tier -> this.getScalarMultiplier(tier, key));
+    }
+
+    /**
+     * The strongest attribute multiplier any of this stack's ladders declares for {@code attribute}.
+     *
+     * <p>The same reasoning as {@link #getScalarMultiplier(ItemStack, String)}, applied to attributes
+     * — a tier's contract states what scales and how, and where two ladders both state it, the one
+     * with an actual effect is the one worth showing.</p>
+     */
+    public synchronized Optional<Double> getAttributeMultiplier(final ItemStack stack, final Attribute attribute) {
+        return strongest(this.readAllTiersFromNbt(stack).values(),
+                tier -> this.getAttributeMultiplier(tier, attribute));
+    }
+
+    private static Optional<Double> strongest(final Collection<TierDefinition> tiers,
+                                              final java.util.function.Function<TierDefinition, Optional<Double>> lookup) {
+        Optional<Double> best = Optional.empty();
+        for (final TierDefinition tier : tiers) {
+            final Optional<Double> candidate = lookup.apply(tier);
+            if (candidate.isEmpty()) {
+                continue;
+            }
+            if (best.isEmpty() || Math.abs(candidate.get() - 1.0D) > Math.abs(best.get() - 1.0D)) {
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
     public Set<String> getMultiplierKeyCandidates(final Attribute attribute) {
         final Set<String> candidates = new LinkedHashSet<>();
         final String canonical = getMultiplierKey(attribute);
@@ -308,65 +358,122 @@ public final class TierService implements ITierService {
         return List.copyOf(this.tiersByKey.values());
     }
 
+    /**
+     * The tier an item should be presented as, when no domain is specified.
+     *
+     * <p>Every domain the item belongs to has its own ladder, so an axe can be {@code epic} as a
+     * weapon and {@code common} as a tool. The name line has one slot for one bracket, so it shows
+     * the highest rung the item has reached on any ladder: that is the state a player who has been
+     * upgrading the item expects to see, and hiding it behind the lower ladder would read as a bug.
+     * Ties fall back to domain declaration order, which is stable between runs.</p>
+     */
     public synchronized Optional<TierDefinition> resolveCurrentTier(final ItemStack stack, final TierDomain preferredDomain) {
-        final Optional<TierDefinition> fromNbt = this.readTierFromNbt(stack, null);
-        if (fromNbt.isPresent()) {
-            return fromNbt;
+        if (preferredDomain != null) {
+            final Optional<TierDefinition> stored = this.readTierFromNbt(stack, preferredDomain);
+            if (stored.isPresent()) {
+                return stored;
+            }
+            return this.getInitialTierForItem(stack.getItem(), preferredDomain);
         }
-        if (stack.hasTag() && stack.getTag().contains("TieredEchoes")
-                && stack.getTag().getCompound("TieredEchoes").contains("tier_id")) {
-            // The id is recorded but no domain resolves it: the datapack that defined it is gone.
-            return Optional.empty();
+        final Map<TierDomain, TierDefinition> stored = this.readAllTiersFromNbt(stack);
+        if (!stored.isEmpty()) {
+            return stored.values().stream().max(this.displayTierComparator());
         }
-        final TierDomain domain = preferredDomain != null
-                ? preferredDomain
-                : this.inferDomains(stack.getItem()).stream().findFirst().orElse(null);
-        if (domain == null) {
-            return Optional.empty();
-        }
-        return this.getInitialTierForItem(stack.getItem(), domain);
+        // Nothing stored: an untiered item shows the initial rung of its first ladder, which is what
+        // it would sit on the moment it is tiered for the first time.
+        final TierDomain domain = this.inferDomains(stack.getItem()).stream().findFirst().orElse(null);
+        return domain == null ? Optional.empty() : this.getInitialTierForItem(stack.getItem(), domain);
     }
 
     /**
-     * Reads {@code tier_id} together with the {@code tier_domain} recorded alongside it. Falls back to
-     * inferring the domain from the item when the tag predates domain bookkeeping.
+     * Orders tiers for display: highest rung first, with domain declaration order breaking ties.
+     *
+     * <p>{@code sort_order} is the ladder's own statement of rank, so it beats everything else.
+     * Domain order is the tie-break because an axe's {@code uncommon} weapon rung and {@code uncommon}
+     * tool rung are equally good, and the answer must not change between runs.</p>
      */
-    public synchronized Optional<TierDefinition> readTierFromNbt(final ItemStack stack, final TierDomain preferredDomain) {
-        if (stack.isEmpty() || !stack.hasTag() || !stack.getTag().contains("TieredEchoes")) {
+    private Comparator<TierDefinition> displayTierComparator() {
+        return Comparator.comparingInt(TierDefinition::sortOrder)
+                .thenComparingInt(tier -> tier.domain().ordinal());
+    }
+
+    /**
+     * Reads every ladder this stack carries, keyed by domain.
+     *
+     * <p>Ladder state lives under {@code TieredEchoes.domains.<domain>} so that an item in two tags
+     * climbs both ladders independently — an axe earns weapon experience from kills and tool
+     * experience from mining, and neither pool advances the other.</p>
+     */
+    public synchronized Map<TierDomain, TierDefinition> readAllTiersFromNbt(final ItemStack stack) {
+        final LinkedHashMap<TierDomain, TierDefinition> result = new LinkedHashMap<>();
+        final CompoundTag te = stackTe(stack);
+        if (te == null || !te.contains(DOMAINS_TAG)) {
+            return result;
+        }
+        final CompoundTag domains = te.getCompound(DOMAINS_TAG);
+        for (final String key : domains.getAllKeys()) {
+            final TierDomain domain = TierDomain.byName(key).orElse(null);
+            if (domain == null) {
+                // A domain a datapack removed, or one written by a newer build. Skipping it leaves
+                // the rest of the item's ladders intact instead of discarding the whole stack.
+                continue;
+            }
+            final ResourceLocation tierId = ResourceLocation.tryParse(domains.getCompound(key).getString(TIER_ID_TAG));
+            if (tierId == null) {
+                continue;
+            }
+            this.getTier(tierId, domain).ifPresent(tier -> result.put(domain, tier));
+        }
+        return result;
+    }
+
+    /**
+     * The ladders this stack has any recorded state on, whether or not that state names a rung.
+     *
+     * <p>Experience can arrive before a tier is written, so a ladder holding only a pool of
+     * experience still counts: it is a ladder the item is climbing, it simply has not been tiered
+     * yet. Iteration follows enum declaration order so the result is deterministic.</p>
+     */
+    public synchronized List<TierDomain> recordedLadderDomains(final ItemStack stack) {
+        final CompoundTag te = stackTe(stack);
+        if (te == null || !te.contains(DOMAINS_TAG)) {
+            return List.of();
+        }
+        final CompoundTag domains = te.getCompound(DOMAINS_TAG);
+        final List<TierDomain> found = new ArrayList<>();
+        for (final TierDomain domain : TierDomain.values()) {
+            if (domains.contains(domain.getSerializedName())) {
+                found.add(domain);
+            }
+        }
+        return List.copyOf(found);
+    }
+
+    /**
+     * Reads the tier recorded for one specific domain, or empty when that ladder has no rung stored.
+     */
+    public synchronized Optional<TierDefinition> readTierFromNbt(final ItemStack stack, final TierDomain domain) {
+        final CompoundTag te = stackTe(stack);
+        if (te == null || !te.contains(DOMAINS_TAG) || domain == null) {
             return Optional.empty();
         }
-        final CompoundTag te = stack.getTag().getCompound("TieredEchoes");
-        if (!te.contains("tier_id")) {
+        final String key = domain.getSerializedName();
+        final CompoundTag domains = te.getCompound(DOMAINS_TAG);
+        if (!domains.contains(key)) {
             return Optional.empty();
         }
-        final ResourceLocation tierId = ResourceLocation.tryParse(te.getString("tier_id"));
+        final ResourceLocation tierId = ResourceLocation.tryParse(domains.getCompound(key).getString(TIER_ID_TAG));
         if (tierId == null) {
             return Optional.empty();
         }
-        if (te.contains("tier_domain")) {
-            try {
-                final TierDomain stored = TierDomain.valueOf(te.getString("tier_domain").toUpperCase(Locale.ROOT));
-                final Optional<TierDefinition> scoped = this.getTier(tierId, stored);
-                if (scoped.isPresent()) {
-                    return scoped;
-                }
-            } catch (final IllegalArgumentException ignored) {
-                // Unknown domain written by a newer pack; fall through to inference.
-            }
+        return this.getTier(tierId, domain);
+    }
+
+    private static CompoundTag stackTe(final ItemStack stack) {
+        if (stack.isEmpty() || !stack.hasTag() || !stack.getTag().contains(ROOT_TAG)) {
+            return null;
         }
-        if (preferredDomain != null) {
-            final Optional<TierDefinition> preferred = this.getTier(tierId, preferredDomain);
-            if (preferred.isPresent()) {
-                return preferred;
-            }
-        }
-        for (final TierDomain domain : this.inferDomains(stack.getItem())) {
-            final Optional<TierDefinition> inferred = this.getTier(tierId, domain);
-            if (inferred.isPresent()) {
-                return inferred;
-            }
-        }
-        return Optional.empty();
+        return stack.getTag().getCompound(ROOT_TAG);
     }
 
     private List<Item> registeredItemsFor(final TierDomain domain) {
