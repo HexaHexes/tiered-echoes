@@ -3,6 +3,7 @@ package org.bitwisemadness.tieredechoes.common.network;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Rarity;
+import org.bitwisemadness.tieredechoes.common.network.client.DisplayEdge;
 import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
 import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
@@ -115,11 +116,41 @@ final class TierCodec {
         return tiers;
     }
 
+    static void writeDisplayEdges(final FriendlyByteBuf buf, final List<DisplayEdge> edges) {
+        buf.writeVarInt(edges.size());
+        for (final DisplayEdge edge : edges) {
+            buf.writeResourceLocation(edge.from());
+            buf.writeResourceLocation(edge.to());
+            buf.writeEnum(edge.domain());
+            writeOptionalString(buf, edge.displayBranchId());
+            // Two-state rather than optional-presence: an absent override must survive as absent,
+            // because it means "use the target tier's own experience_required".
+            buf.writeBoolean(edge.experienceRequirementOverride().isPresent());
+            edge.experienceRequirementOverride().ifPresent(buf::writeVarInt);
+        }
+    }
+
+    static List<DisplayEdge> readDisplayEdges(final FriendlyByteBuf buf) {
+        final int size = buf.readVarInt();
+        if (size < 0 || size > 4096) {
+            throw new IllegalArgumentException("Tier sync packet declared an implausible edge count: " + size);
+        }
+        final List<DisplayEdge> edges = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            final ResourceLocation from = buf.readResourceLocation();
+            final ResourceLocation to = buf.readResourceLocation();
+            final TierDomain domain = buf.readEnum(TierDomain.class);
+            final Optional<String> branchId = readOptionalString(buf);
+            final Optional<Integer> override = buf.readBoolean() ? Optional.of(buf.readVarInt()) : Optional.empty();
+            edges.add(new DisplayEdge(from, to, domain, branchId, override));
+        }
+        return edges;
+    }
+
     private static void writeMatcher(final FriendlyByteBuf buf, final IngredientMatcher matcher) {
         buf.writeEnum(matcher.kind());
         buf.writeResourceLocation(matcher.id());
     }
-
     private static IngredientMatcher readMatcher(final FriendlyByteBuf buf) {
         return new IngredientMatcher(buf.readEnum(IngredientMatcher.Kind.class), buf.readResourceLocation());
     }

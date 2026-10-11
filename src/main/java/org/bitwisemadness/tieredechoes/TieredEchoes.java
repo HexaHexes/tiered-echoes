@@ -13,6 +13,7 @@ import org.bitwisemadness.tieredechoes.common.compat.arsnouveau.ArsNouveauCompat
 import org.bitwisemadness.tieredechoes.common.compat.ironsspells.IronsSpellsCompatBridge;
 import org.bitwisemadness.tieredechoes.common.compat.legendarysurvivaloverhaul.LegendarySurvivalOverhaulCompatBridge;
 import org.bitwisemadness.tieredechoes.common.config.TieredEchoesConfig;
+import org.bitwisemadness.tieredechoes.common.gamerule.TEGameRules;
 import org.bitwisemadness.tieredechoes.common.network.TENetwork;
 import org.bitwisemadness.tieredechoes.common.registry.TECreativeTabs;
 import org.bitwisemadness.tieredechoes.common.registry.TEItems;
@@ -42,6 +43,9 @@ public final class TieredEchoes {
 
     private void onCommonSetup(final FMLCommonSetupEvent event) {
         LOGGER.info("Initializing {}", MOD_NAME);
+        // Gamerule defaults come from the config file, so this has to run after config load, which
+        // common setup guarantees. Commands are built later, at server start, so they see the keys.
+        event.enqueueWork(TEGameRules::register);
         if (TieredEchoesConfig.COMPAT_AUDIT_MODE.get()) {
             LOGGER.info("[CompatAudit] apotheosis={}, ars_nouveau={}, irons_spellbooks={}, legendarysurvivaloverhaul={}",
                     ApotheosisCompatBridge.getInstance().isLoaded(),

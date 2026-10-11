@@ -34,7 +34,7 @@ public final class ProgressionGameTest {
         final ItemStack stack = GameTestTiers.tieredSword(helper, "common");
         UpgradeService.getInstance().setStoredExperience(stack, uncommon.experienceRequired());
 
-        final ItemStack upgraded = UpgradeService.getInstance().tryAutoUpgrade(stack)
+        final ItemStack upgraded = UpgradeService.getInstance().tryAutoUpgrade(stack, helper.getLevel().getServer())
                 .orElseThrow(() -> new GameTestAssertException(
                         "an item holding " + uncommon.experienceRequired() + " xp should have advanced"));
 
@@ -65,7 +65,7 @@ public final class ProgressionGameTest {
                 "attunement should have recorded which branch was chosen");
 
         UpgradeService.getInstance().setStoredExperience(stack, uncommon.experienceRequired());
-        final ItemStack upgraded = UpgradeService.getInstance().tryAutoUpgrade(stack)
+        final ItemStack upgraded = UpgradeService.getInstance().tryAutoUpgrade(stack, helper.getLevel().getServer())
                 .orElseThrow(() -> new GameTestAssertException("the attuned branch should still be upgradeable"));
 
         helper.assertFalse(UpgradeService.getInstance().getSelectedBranchId(upgraded).isPresent(),
@@ -79,7 +79,7 @@ public final class ProgressionGameTest {
         final ItemStack stack = GameTestTiers.tieredSword(helper, "epic");
         UpgradeService.getInstance().setStoredExperience(stack, 10_000);
 
-        final Optional<ItemStack> upgraded = UpgradeService.getInstance().tryAutoUpgrade(stack);
+        final Optional<ItemStack> upgraded = UpgradeService.getInstance().tryAutoUpgrade(stack, helper.getLevel().getServer());
 
         helper.assertFalse(upgraded.isPresent(), "an epic item has nowhere further to go");
         helper.assertTrue(UpgradeService.getInstance().getStoredExperience(stack) == 10_000,

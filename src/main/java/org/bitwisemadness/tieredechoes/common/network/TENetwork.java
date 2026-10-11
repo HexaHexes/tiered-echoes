@@ -10,8 +10,13 @@ import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.simple.SimpleChannel;
 import net.minecraftforge.server.ServerLifecycleHooks;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
+import org.bitwisemadness.tieredechoes.common.gamerule.TEGameRules;
+import org.bitwisemadness.tieredechoes.common.network.client.DisplayEdge;
+import org.bitwisemadness.tieredechoes.common.path.PathService;
 import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
+
+import java.util.List;
 
 /**
  * The mod's network channel.
@@ -66,6 +71,24 @@ public final class TENetwork {
     }
 
     private static TierDataSyncPacket currentPayload() {
-        return new TierDataSyncPacket(TierService.getInstance().getAllTiers(), PolicyService.getInstance().get());
+        final MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        return new TierDataSyncPacket(
+                TierService.getInstance().getAllTiers(),
+                PolicyService.getInstance().get(),
+                displayEdges(),
+                TEGameRules.itemExperienceEnabled(server),
+                TEGameRules.autoUpgradeEnabled(server),
+                TEGameRules.resetExperienceOnUpgrade(server));
+    }
+
+    /**
+     * Projects the full edge graph down to what a tooltip can quote. Ingredients and compat
+     * amplifiers stay on the server; see {@link DisplayEdge}.
+     */
+    private static List<DisplayEdge> displayEdges() {
+        return PathService.getInstance().getAllEdgesLike().stream()
+                .map(edge -> new DisplayEdge(edge.from(), edge.to(), edge.domain(),
+                        edge.displayBranchId(), edge.experienceRequirementOverride()))
+                .toList();
     }
 }
