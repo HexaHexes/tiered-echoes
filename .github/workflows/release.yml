@@ -46,6 +46,8 @@ jobs:
 
       - name: Determine release channel
         id: channel
+        env:
+          ALPHA_RELEASES: ${{ vars.ALPHA_RELEASES }}
         run: |
           set -euo pipefail
 
@@ -98,6 +100,34 @@ jobs:
           echo "channel: $CHANNEL ($REASON)"
           echo "tag: $TAG"
 
+          # Automatic alpha releases are opt-in. The alpha channel fires on any
+          # push to main that did not bump the version, so with no switch it
+          # tags and publishes a build for every commit - noise nobody asked
+          # for, and awkward to unwind once those tags are in the wild.
+          #
+          # Deliberately read as a repository variable rather than a workflow
+          # default so it can be flipped without editing this file. Unset counts
+          # as off: silence is the safer failure mode. Forgetting to switch it
+          # on costs one missing nightly; forgetting to switch it off costs an
+          # unwanted published release and a tag to clean up.
+          #
+          # This gates the release only, never the build. The tests below are
+          # the sole verification main receives after a merge - CI runs on the
+          # pull request, not on the merge - so they keep running whether or not
+          # anything gets published.
+          ALPHA_ON=$(printf '%s' "${ALPHA_RELEASES:-}" | tr '[:upper:]' '[:lower:]')
+          case "$ALPHA_ON" in
+            true|1|yes|on) ALPHA_ON="true" ;;
+            *)             ALPHA_ON="false" ;;
+          esac
+
+          if [ "$CHANNEL" = "alpha" ] && [ "$ALPHA_ON" != "true" ]; then
+            RELEASE="false"
+            echo "::notice::Skipping the $CHANNEL release for $TAG. Set the ALPHA_RELEASES repository variable to true to publish alphas again."
+          else
+            RELEASE="true"
+          fi
+
           # Alphas never reach CurseForge. This mirrors the skip inside the
           # CurseForge workflow so the decision is made in one place, before
           # anything is dispatched.
@@ -108,6 +138,7 @@ jobs:
             echo "tag=$TAG"
             echo "version=$NEW_VERSION"
             echo "publish=$PUBLISH"
+            echo "release=$RELEASE"
           } >> "$GITHUB_OUTPUT"
 
       - name: Build and run JUnit suite
@@ -159,6 +190,7 @@ jobs:
 
       - name: Generate changelog
         id: changelog
+        if: steps.channel.outputs.release == 'true'
         env:
           CHANNEL: ${{ steps.channel.outputs.channel }}
         run: |
@@ -201,6 +233,7 @@ jobs:
           echo "$BODY"
 
       - name: Create or update annotated tag
+        if: steps.channel.outputs.release == 'true'
         env:
           TAG: ${{ steps.channel.outputs.tag }}
         run: |
@@ -223,6 +256,7 @@ jobs:
           git push -f origin "refs/tags/$TAG"
 
       - name: Create or update GitHub release
+        if: steps.channel.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.channel.outputs.tag }}
@@ -273,7 +307,7 @@ jobs:
       # exempt from that rule. Letting this fail is deliberate: a release that
       # silently skips the store is worse than a visibly red run.
       - name: Dispatch CurseForge publishing
-        if: steps.channel.outputs.publish == 'true'
+        if: steps.channel.outputs.release == 'true' && steps.channel.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.channel.outputs.tag }}
