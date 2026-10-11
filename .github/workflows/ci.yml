@@ -2,12 +2,21 @@ name: CI
 
 on:
   pull_request:
+  # version-bump.yml dispatches this on the bump branch. GitHub deliberately
+  # runs no workflows for a pull_request raised by the default GITHUB_TOKEN, so
+  # a PR it opens would otherwise sit with no checks at all - and with required
+  # status checks, no way to merge but admin. The version-bump job below falls
+  # back to the default branch when there is no pull_request context, so a
+  # dispatch validates exactly what the pull_request run would have.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number }}
+  # A workflow_dispatch has no pull_request.number. Falling back to the run id
+  # keeps manual runs from sharing a group - and so cancelling each other.
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -133,8 +142,12 @@ jobs:
 
       - name: Enforce version bump rules
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
+          # Falls back to the default branch and the checked-out commit when
+          # this is a workflow_dispatch. Both spell the same comparison the
+          # pull_request run makes, so a dispatch cannot pass a bump that the
+          # real check would have rejected.
+          BASE: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
 
@@ -190,7 +203,7 @@ jobs:
       - name: Enforce breaking changes require a major or minor bump
         env:
           GH_TOKEN: ${{ github.token }}
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
         run: |
           set -euo pipefail
 
@@ -224,7 +237,6 @@ jobs:
 
           echo "last stable tag: $BASELINE"
 
-          RANGE="$BASELINE..$HEAD"
           BREAKING=$(gh pr list --state merged --label breaking --search "merged:>=$(git log -1 --format=%cI "$BASELINE")" --json number --jq '.[].number' || true)
 
           if [ -z "$BREAKING" ]; then

@@ -108,6 +108,21 @@ cut an alpha therefore still goes red if it breaks something, it simply publishe
 Beta and stable are unaffected in either direction, so cutting a real release never depends on
 the variable being set.
 
-To cut a release, edit `mod_version`, open a PR containing only that change, and merge it. The
-changelog is generated from commit subjects; for a stable release it spans back to the previous
-stable tag, so `v0.2.0` lists everything since `v0.1.0`.
+### Cutting a release
+
+Use the **Version Bump** workflow under *Actions*, which opens an isolated `gradle.properties`
+PR for you. It takes a bump (`major`, `minor`, `patch` or `none`) and a channel (`stable` or
+`beta`); once a pre-release train has started it holds the version base and only advances the
+`-beta.N` counter, so repeated runs walk `0.2.0-beta.1`, `0.2.0-beta.2`, and a switch to
+`stable` cuts the base.
+
+Editing `mod_version` by hand and opening the PR yourself works identically. The changelog is
+generated from commit subjects; for a stable release it spans back to the previous stable tag,
+so `v0.2.0` lists everything since `v0.1.0`.
+
+The workflow opens its PR with the `BUMP_PR_TOKEN` secret if one is configured, falling back to
+the default `GITHUB_TOKEN` if not. That fallback matters: GitHub runs no workflows for a
+pull request raised by the default token, so without the secret the workflow dispatches `ci.yml`
+on the bump branch itself to get the same checks reporting. Configure `BUMP_PR_TOKEN` as a
+fine-grained PAT with contents and pull-request write access if you would rather the checks came
+from the ordinary pull request event.
