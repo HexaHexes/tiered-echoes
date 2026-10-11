@@ -24,7 +24,6 @@ import org.bitwisemadness.tieredechoes.common.tier.TierService;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,16 +47,13 @@ public final class TierRecipeGenerator {
     /**
      * Item tag used as the smithing base slot per domain. These tags ship with the mod and are meant
      * to be extended by datapacks so modded gear becomes tierable.
+     *
+     * <p>Deliberately not a second table: the same tags decide which items <em>belong</em> to a
+     * domain, so a map here could drift from the membership rule and produce recipes for items that
+     * cannot use them.</p>
      */
-    private static final Map<TierDomain, TagKey<Item>> BASE_TAGS = new EnumMap<>(TierDomain.class);
-
-    static {
-        BASE_TAGS.put(TierDomain.WEAPON, TieredEchoesTagKeys.item("weapon_bases"));
-        BASE_TAGS.put(TierDomain.TOOL, TieredEchoesTagKeys.item("tool_bases"));
-        BASE_TAGS.put(TierDomain.ARMOR, TieredEchoesTagKeys.item("armor_bases"));
-        BASE_TAGS.put(TierDomain.ELYTRA, TieredEchoesTagKeys.item("elytra_bases"));
-        BASE_TAGS.put(TierDomain.ACCESSORY, TieredEchoesTagKeys.item("accessory_bases"));
-        BASE_TAGS.put(TierDomain.STORAGE, TieredEchoesTagKeys.item("storage_bases"));
+    private static TagKey<Item> baseTagFor(final TierDomain domain) {
+        return TieredEchoesTagKeys.forDomain(domain).orElse(null);
     }
 
     private TierRecipeGenerator() {
@@ -174,7 +170,7 @@ public final class TierRecipeGenerator {
     }
 
     private static Ingredient baseIngredient(final TierDomain domain) {
-        final TagKey<Item> tag = BASE_TAGS.get(domain);
+        final TagKey<Item> tag = baseTagFor(domain);
         return tag == null ? Ingredient.EMPTY : Ingredient.of(tag);
     }
 

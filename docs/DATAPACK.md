@@ -47,7 +47,7 @@ datapacks produce a warning naming the loser.
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `id` | yes | Namespaced tier id. Scoped by domain — see below. |
-| `domain` | yes | `weapon`, `tool`, `armor`, `elytra`, `accessory` or `storage`. |
+| `domain` | yes | `weapon`, `tool`, `armor`, `shield`, `ranged_weapons`, `elytra` or `accessory`. |
 | `schema_version` | no | Defaults to `1`. |
 | `display_rarity` | no | Vanilla `Rarity` name. Defaults to `COMMON`. |
 | `sort_order` | no | Ladder position within the domain. Defaults to `0`. |
@@ -55,7 +55,7 @@ datapacks produce a warning naming the loser.
 | `upgrade_ingredient` | no | Fallback smithing addition when the path edge declares none. |
 | `downgrade_ingredient` | no | Addition used by the downgrade route out of this tier. |
 | `previous_tier` | no | Informational back-link; the path graph is what actually drives transitions. |
-| `attribute_multipliers` | no | Attribute name → multiplier. Any attribute name is accepted. |
+| `attribute_multipliers` | no | Attribute name → multiplier. Any attribute name is accepted. Also carries `durability`, which is not an attribute but scales the item's maximum durability the same way. |
 | `curios_set_bonuses` | no | Curios set size → multiplier, e.g. `*2` for wearing two pieces. |
 | `compat_amplifiers` | no | `*<n>`-style key → multiplier for a compat-mod attribute. |
 | `generated_upgrade_template` / `generated_downgrade_template` | no | Whether the conventional `<tier>_*_template` items exist. Both default to `true`. |
@@ -65,8 +65,11 @@ datapacks produce a warning naming the loser.
 **Tier ids are not globally unique.** `tieredechoes:rare` exists once per domain. Every lookup is
 scoped by `domain`, so an armor piece can never follow a weapon branch.
 
-Which items belong to a domain is decided by the item's class for `weapon`, `tool`, `armor` and
-`elytra`. `accessory` and `storage` exist for compat and ship with no built-in ladder.
+Which items belong to a domain is decided entirely by that domain's item tag — see
+[Making modded gear tierable](#making-modded-gear-tierable). There is no item-class heuristic: an
+item belongs to a domain because a tag says so, and an item in two tags belongs to two domains and
+climbs a ladder for each. Every built-in domain ships a ladder, including `shield`, `ranged_weapons`
+and `elytra`.
 
 ## `tier_paths/<file>.json`
 
@@ -163,15 +166,55 @@ Files merge onto the defaults, so a two-line datapack can flip one rule.
 
 Add the items to the base tag for their domain rather than writing a recipe:
 
-- `#tieredechoes:weapon_bases`
-- `#tieredechoes:tool_bases`
-- `#tieredechoes:armor_bases`
-- `#tieredechoes:elytra_bases`
-- `#tieredechoes:accessory_bases`
-- `#tieredechoes:storage_bases`
+- `#tieredechoes:weapons`
+- `#tieredechoes:tools`
+- `#tieredechoes:armor`
+- `#tieredechoes:shields`
+- `#tieredechoes:ranged_weapons`
+- `#tieredechoes:elytra`
+- `#tieredechoes:accessories`
 
 These tags ship with the mod and are extended by the generated smithing recipes, so an item added
-to one becomes tierable with no other changes.
+to one becomes tierable with no other changes. They are the whole of the membership rule: an item
+belongs to a domain because its tag contains it, never because of what class it happens to be.
+
+An item in two tags belongs to two domains and climbs both ladders independently. `#minecraft:axes`
+is in both `weapons` and `tools` for exactly this reason.
+
+| Domain | Ships in the tag |
+| --- | --- |
+| `weapons` | `#minecraft:swords`, `#minecraft:axes`, `#forge:tools/tridents` |
+| `tools` | `#minecraft:pickaxes`, `#minecraft:shovels`, `#minecraft:hoes`, `#minecraft:axes` |
+| `armor` | `#forge:armors` |
+| `shields` | `#forge:tools/shields` |
+| `ranged_weapons` | `#forge:tools/bows`, `#forge:tools/crossbows` |
+| `accessories` | `#curios:back`, `:belt`, `:body`, `:bracelet`, `:charm`, `:curio`, `:hands`, `:head`, `:necklace`, `:ring` |
+| `elytra` | `#forge:elytra` |
+
+### Adding your own elytra
+
+Neither vanilla nor Forge ships an elytra item tag — in 1.20.1 the elytra is in no tag at all — so
+this mod seeds one:
+
+```json
+// data/forge/tags/items/elytra.json
+{
+  "replace": false,
+  "values": [ "minecraft:elytra" ]
+}
+```
+
+Because that file lives in the shared `forge` namespace and uses `"replace": false`, any mod or
+datapack can add further elytras by shipping its own `data/forge/tags/items/elytra.json` with more
+values. Nothing in this mod needs to change. If you have a modded elytra, contribute it there rather
+than patching `#tieredechoes:elytra` directly, so every pack picks it up.
+
+### A note on spears and hammers
+
+Spear- and hammer-type weapons have no item class in 1.20.1 and no vanilla tag, so there is nothing
+for these ladders to hold yet. When a future Minecraft version adds them, they follow the same path
+everything else does: add the new vanilla tag to `#tieredechoes:weapons` and they are on the ladder.
+No Java change will be needed — that is the point of the tag being the rule.
 
 ## Recipes
 
@@ -184,7 +227,7 @@ plus `domain`, `source_tier` and `target_tier`:
 {
   "type": "tieredechoes:tier_upgrade",
   "template": { "item": "tieredechoes:rare_upgrade_template" },
-  "base": { "tag": "tieredechoes:weapon_bases" },
+  "base": { "tag": "tieredechoes:weapons" },
   "addition": { "item": "minecraft:diamond" },
   "domain": "weapon",
   "source_tier": "tieredechoes:uncommon",

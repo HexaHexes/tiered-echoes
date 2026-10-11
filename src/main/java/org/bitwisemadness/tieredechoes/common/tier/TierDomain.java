@@ -6,9 +6,10 @@ public enum TierDomain implements StringRepresentable {
     WEAPON("weapon"),
     TOOL("tool"),
     ARMOR("armor"),
+    SHIELD("shield"),
+    RANGED_WEAPONS("ranged_weapons"),
     ELYTRA("elytra"),
-    ACCESSORY("accessory"),
-    STORAGE("storage");
+    ACCESSORY("accessory");
 
     private final String serializedName;
 
@@ -20,9 +21,14 @@ public enum TierDomain implements StringRepresentable {
      * Domains that ship with a built-in tier ladder. Both {@code TierService} and {@code PathService}
      * bootstrap from this list so that every built-in edge has matching built-in endpoints — a
      * mismatch would show up as {@code missing_source_tier} validation errors on every load.
+     *
+     * <p>Membership is decided by the {@code tieredechoes:<name>} item tags rather than by item
+     * class, so an item belongs to a domain because a tag says so and an item in two tags belongs to
+     * two domains with a ladder for each. Adding an item to a tag is therefore the whole of making it
+     * tierable, and a datapack can do that for any item without a line of Java.</p>
      */
     public static java.util.List<TierDomain> builtinDomains() {
-        return java.util.List.of(WEAPON, TOOL, ARMOR, ACCESSORY);
+        return java.util.List.of(WEAPON, TOOL, ARMOR, SHIELD, RANGED_WEAPONS, ELYTRA, ACCESSORY);
     }
 
     @Override

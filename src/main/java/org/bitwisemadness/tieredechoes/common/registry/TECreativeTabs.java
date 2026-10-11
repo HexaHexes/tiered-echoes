@@ -28,6 +28,9 @@ public final class TECreativeTabs {
         registerDomainTab(TierDomain.TOOL, Items.DIAMOND_PICKAXE);
         registerDomainTab(TierDomain.WEAPON, Items.DIAMOND_SWORD);
         registerDomainTab(TierDomain.ARMOR, Items.DIAMOND_CHESTPLATE);
+        registerDomainTab(TierDomain.SHIELD, Items.SHIELD);
+        registerDomainTab(TierDomain.RANGED_WEAPONS, Items.BOW);
+        registerDomainTab(TierDomain.ELYTRA, Items.ELYTRA);
         if (ModList.get().isLoaded("curios")) {
             registerDomainTab(TierDomain.ACCESSORY, Items.TOTEM_OF_UNDYING);
         }
@@ -61,13 +64,18 @@ public final class TECreativeTabs {
         }));
     }
 
+    /**
+     * The tab this one should follow. Derived from declaration order rather than a hand-written
+     * switch, because the switch silently dropped every domain nobody remembered to add — which is
+     * how {@code shield}, {@code ranged_weapons} and {@code elytra} would have shipped unlinked.
+     */
     private static java.util.Optional<ResourceKey<CreativeModeTab>> previousTabKey(final TierDomain domain) {
-        return switch (domain) {
-            case WEAPON -> java.util.Optional.of(tabKey(TierDomain.TOOL));
-            case ARMOR -> java.util.Optional.of(tabKey(TierDomain.WEAPON));
-            case ACCESSORY -> java.util.Optional.of(tabKey(TierDomain.ARMOR));
-            default -> java.util.Optional.empty();
-        };
+        final java.util.List<TierDomain> order = TierDomain.builtinDomains();
+        final int index = order.indexOf(domain);
+        if (index <= 0) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(tabKey(order.get(index - 1)));
     }
 
     private static java.util.Optional<ResourceKey<CreativeModeTab>> templatePreviousTabKey() {

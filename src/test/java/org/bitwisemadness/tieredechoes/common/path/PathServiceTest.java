@@ -205,7 +205,7 @@ class PathServiceTest {
         assertEquals(0, report.errorCount(), () -> describe(report));
         assertEquals(0, report.warningCount(), () -> describe(report));
         assertFalse(report.hasErrors());
-        assertEquals(12, this.service.getAllEdgesLike().size(),
-                "the shipped graph is four domains of three linear steps, with built-in duplicates dropped");
+        assertEquals(TierDomain.builtinDomains().size() * 3, this.service.getAllEdgesLike().size(),
+                "the shipped graph is one domain of three linear steps per built-in domain, with built-in duplicates dropped");
     }
 }

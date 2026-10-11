@@ -1,13 +1,13 @@
 # Tiered Echoes
 
 A Forge mod for Minecraft 1.20.1 where gear gains experience as you use it and climbs a tier
-ladder in return. Weapons, tools, armor and accessories each have their own ladder, running
-Common, Uncommon, Rare, Epic.
+ladder in return. Weapons, tools, armor, shields, ranged weapons, elytra and accessories each have
+their own ladder, running Common, Uncommon, Rare, Epic.
 
 ## Progression
 
 Experience comes from use. Weapons earn it from the damage they deal, tools from the blocks
-they break, armor from the hits it takes.
+they break, armor from the hits it takes, shields and elytra from the punishment they absorb.
 
 Hovering a tiered item shows how far it is from its next tier, as `Experience: 45 / 150`.
 
@@ -35,6 +35,9 @@ Armor, tools and accessories use the same four tiers with multipliers of their o
 additionally grant Curios set bonuses that rise with each matching piece equipped, reaching
 1.24x at Epic with a full set.
 
+Shields, ranged weapons and elytra scale durability only. None of them carry attributes in vanilla,
+so declaring an attack damage multiplier on a bow would do nothing at all.
+
 Tier ids are scoped by domain, so Rare on a sword and Rare on a chestplate are separate things,
 and an armor piece can never follow a weapon branch.
 
@@ -59,8 +62,9 @@ a decision about a world rather than about an installation.
 
 ## Included
 
-Four domains, `weapon`, `tool`, `armor` and `accessory`, each carrying the four tiers above,
-the matching upgrade and downgrade templates, and base tags for modded gear to join.
+Seven domains — `weapon`, `tool`, `armor`, `shield`, `ranged_weapons`, `elytra` and `accessory` —
+each carrying the four tiers above, the matching upgrade and downgrade templates, and a base tag
+for modded gear to join. Membership of a domain is decided by that tag and nothing else.
 
 Tiered items show their tier in the name, as `Iron Sword [Uncommon]`.
 
@@ -76,7 +80,9 @@ Tiers, paths, templates and progression rules are all data. The mod ships a comp
 you can copy and edit; see [docs/DATAPACK.md](https://github.com/HexaHexes/tiered-echoes/blob/main/docs/DATAPACK.md).
 
 Modded items become tierable by adding them to the base tag for their domain:
-`#tieredechoes:weapon_bases`, `#tieredechoes:tool_bases`, `#tieredechoes:armor_bases`.
+`#tieredechoes:weapons`, `#tieredechoes:tools`, `#tieredechoes:armor`, `#tieredechoes:shields`,
+`#tieredechoes:ranged_weapons`, `#tieredechoes:elytra` and `#tieredechoes:accessories`. The tag is
+the whole of the rule — an item in two tags climbs two ladders.
 
 Pacing starts in `config/tieredechoes-common.toml`, which supplies the value each gamerule is
 created with. Contributor documentation, including the build and release process, lives in

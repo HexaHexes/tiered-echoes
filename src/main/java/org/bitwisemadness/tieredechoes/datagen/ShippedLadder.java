@@ -67,16 +67,44 @@ public final class ShippedLadder {
                     "mana_regen", 1.25D, "cold_resistance", 1.4D, "heat_resistance", 1.4D,
                     "thermal_resistance", 1.4D));
 
+    /**
+     * Multipliers for domains whose items carry no attributes at all in vanilla — a shield, an elytra
+     * and a bow all scale durability and nothing else. Declaring {@code attack_damage} on a bow tier
+     * would do nothing, because no such modifier is ever applied to it, and a datapack author reading
+     * the file would reasonably conclude that it was.
+     */
+    private static final List<Map<String, Double>> DURABILITY_ONLY_MULTIPLIERS = List.of(
+            map("durability", 1.0D),
+            map("durability", 1.1D),
+            map("durability", 1.2D),
+            map("durability", 1.35D));
+
     private static final List<Map<String, Double>> SET_BONUSES = List.of(
             map("*2", 1.05D),
             map("*2", 1.07D, "*3", 1.1D),
             map("*2", 1.1D, "*3", 1.15D, "*4", 1.2D),
             map("*2", 1.12D, "*3", 1.18D, "*4", 1.24D));
 
+    /** Domains with no attribute surface, so their tiers declare durability scaling only. */
+    private static boolean isDurabilityOnly(final TierDomain domain) {
+        return switch (domain) {
+            case SHIELD, RANGED_WEAPONS, ELYTRA -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * Curios set bonuses only mean anything for items that live in a curios slot. Emitting them on a
+     * shield tier would advertise a feature those items cannot use.
+     */
+    private static Map<String, Double> setBonusesFor(final TierDomain domain, final int index) {
+        return isDurabilityOnly(domain) ? Map.of() : SET_BONUSES.get(index);
+    }
+
     private ShippedLadder() {
     }
 
-    /** The domains that ship a ladder. {@code elytra} and {@code storage} are compat-only. */
+    /** The domains that ship a ladder. Every {@code TierDomain} is one; there are no compat-only ones. */
     public static List<TierDomain> domains() {
         return TierDomain.builtinDomains();
     }
@@ -160,6 +188,8 @@ public final class ShippedLadder {
         // A tier's downgrade ingredient is the material the tier below it was made from, so stepping
         // down refunds the difference rather than charging again for the same thing.
         final String downgrade = index == 0 ? "minecraft:stick" : ingredients.get(index - 1);
+        final List<Map<String, Double>> multipliers =
+                isDurabilityOnly(domain) ? DURABILITY_ONLY_MULTIPLIERS : ATTRIBUTE_MULTIPLIERS;
         return new TierDefinition(
                 new ResourceLocation(TieredEchoes.MOD_ID, name),
                 domain,
@@ -171,8 +201,8 @@ public final class ShippedLadder {
                 Optional.of(item(downgrade)),
                 index == 0 ? Optional.empty() : Optional.of(new ResourceLocation(TieredEchoes.MOD_ID, TIER_NAMES.get(index - 1))),
                 Optional.of(TieredEchoes.MOD_ID),
-                ATTRIBUTE_MULTIPLIERS.get(index),
-                SET_BONUSES.get(index),
+                multipliers.get(index),
+                setBonusesFor(domain, index),
                 Map.of(),
                 true,
                 true,
@@ -199,8 +229,19 @@ public final class ShippedLadder {
                 Map.of());
     }
 
+    /**
+     * The upgrade ingredients a domain walks up.
+     *
+     * <p>{@code ACCESSORY} and {@code ELYTRA} escalate through rarer materials because they are rare
+     * themselves and have no durability to trade away — an elytra's ladder is a rarity ladder, and
+     * making a player pay netherite to improve a flight item would be a materials joke rather than a
+     * progression step.</p>
+     */
     private static List<String> ingredientsFor(final TierDomain domain) {
-        return domain == TierDomain.ACCESSORY ? ACCESSORY_INGREDIENTS : STANDARD_INGREDIENTS;
+        return switch (domain) {
+            case ACCESSORY, ELYTRA -> ACCESSORY_INGREDIENTS;
+            default -> STANDARD_INGREDIENTS;
+        };
     }
 
     private static IngredientMatcher item(final String id) {

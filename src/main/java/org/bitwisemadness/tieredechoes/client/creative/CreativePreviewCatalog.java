@@ -60,16 +60,13 @@ public final class CreativePreviewCatalog {
     }
 
     private static TierDomain parseDomain(final String tabKey) {
-        try {
-            return TierDomain.valueOf(tabKey.toUpperCase(java.util.Locale.ROOT));
-        } catch (IllegalArgumentException ignored) {
-            return switch (tabKey) {
-                case "weapons", "weapon" -> TierDomain.WEAPON;
-                case "tools", "tool" -> TierDomain.TOOL;
-                case "armor" -> TierDomain.ARMOR;
-                case "curios", "curio", "accessory", "accessories" -> TierDomain.ACCESSORY;
-                default -> null;
-            };
-        }
+        // byName already resolves both the serialized name and the constant, case-insensitively, so
+        // a domain added later needs no case here — the switch below exists only for the plural and
+        // legacy-curio spellings that were never serialized names.
+        return TierDomain.byName(tabKey).orElseGet(() -> switch (tabKey) {
+            case "weapons", "tools", "accessories" -> TierDomain.byName(tabKey.substring(0, tabKey.length() - 1)).orElse(null);
+            case "curios", "curio" -> TierDomain.ACCESSORY;
+            default -> null;
+        });
     }
 }
