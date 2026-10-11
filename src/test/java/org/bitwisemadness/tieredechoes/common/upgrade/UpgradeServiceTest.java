@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The progression contract: what an item keeps, what it spends, and when it advances.
  *
  * <p>A synthetic three-tier ladder is installed rather than the shipped one so each test can pin an
- * exact experience number instead of reasoning about four tiers across four domains.</p>
+ * exact experience number instead of reasoning about four tiers across every domain.</p>
  */
 class UpgradeServiceTest {
 

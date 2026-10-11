@@ -1,12 +1,12 @@
 package org.bitwisemadness.tieredechoes.common.tier;
 
+import org.bitwisemadness.tieredechoes.common.registry.TieredEchoesTagKeys;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TierDomainTest {
@@ -14,7 +14,14 @@ class TierDomainTest {
     @Test
     void resolvesFromSerializedName() {
         assertEquals(Optional.of(TierDomain.WEAPON), TierDomain.byName("weapon"));
-        assertEquals(Optional.of(TierDomain.STORAGE), TierDomain.byName("storage"));
+        assertEquals(Optional.of(TierDomain.SHIELD), TierDomain.byName("shield"));
+        assertEquals(Optional.of(TierDomain.RANGED_WEAPONS), TierDomain.byName("ranged_weapons"));
+    }
+
+    @Test
+    void storageDomainIsGone() {
+        assertEquals(Optional.empty(), TierDomain.byName("storage"),
+                "storage never shipped a ladder, so it was removed rather than left as a dead name");
     }
 
     @Test
@@ -45,10 +52,22 @@ class TierDomainTest {
      */
     @Test
     void builtinDomainsAreExactlyTheOnesThatShipLadders() {
-        assertEquals(List.of(TierDomain.WEAPON, TierDomain.TOOL, TierDomain.ARMOR, TierDomain.ACCESSORY),
+        assertEquals(List.of(TierDomain.WEAPON, TierDomain.TOOL, TierDomain.ARMOR, TierDomain.SHIELD,
+                        TierDomain.RANGED_WEAPONS, TierDomain.ELYTRA, TierDomain.ACCESSORY),
                 TierDomain.builtinDomains());
-        assertTrue(TierDomain.builtinDomains().contains(TierDomain.WEAPON));
-        assertFalse(TierDomain.builtinDomains().contains(TierDomain.ELYTRA),
-                "elytra ships an empty base tag and no ladder, so it must stay out of the builtin list");
+        assertTrue(TierDomain.builtinDomains().contains(TierDomain.ELYTRA),
+                "the elytra ships a durability-only ladder, so it belongs in the builtin list");
+    }
+
+    /**
+     * Every built-in domain needs an item tag, because the tag is the whole of the membership rule —
+     * a domain without one could never claim an item and would ship an unreachable ladder.
+     */
+    @Test
+    void everyBuiltinDomainHasAnItemTag() {
+        for (final TierDomain domain : TierDomain.builtinDomains()) {
+            assertTrue(TieredEchoesTagKeys.forDomain(domain).isPresent(),
+                    domain + " ships a ladder but has no item tag");
+        }
     }
 }

@@ -1,0 +1,15 @@
+{
+  "replace": false,
+  "values": [
+    "#curios:back",
+    "#curios:belt",
+    "#curios:body",
+    "#curios:bracelet",
+    "#curios:charm",
+    "#curios:curio",
+    "#curios:hands",
+    "#curios:head",
+    "#curios:necklace",
+    "#curios:ring"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "attribute_multipliers": {
+    "durability": 1.0
+  },
+  "compat_amplifiers": {},
+  "curios_set_bonuses": {},
+  "display_rarity": "COMMON",
+  "domain": "elytra",
+  "downgrade_ingredient": {
+    "item": "minecraft:stick"
+  },
+  "experience_required": 0,
+  "generated_downgrade_template": true,
+  "generated_upgrade_template": true,
+  "id": "tieredechoes:common",
+  "schema_version": 1,
+  "sort_order": 0,
+  "upgrade_ingredient": {
+    "item": "minecraft:gold_ingot"
+  }
+}

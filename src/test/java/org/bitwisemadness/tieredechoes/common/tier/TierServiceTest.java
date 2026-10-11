@@ -6,6 +6,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.bitwisemadness.tieredechoes.common.data.loader.ShippedDatapack;
 import org.bitwisemadness.tieredechoes.testutil.TestBootstrap;
+import org.bitwisemadness.tieredechoes.testutil.TestTags;
 import org.bitwisemadness.tieredechoes.testutil.TestTiers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +31,9 @@ class TierServiceTest {
 
     @AfterEach
     void tearDown() {
+        // Tag bindings are static and registry-wide, so a binding left behind by one test would make
+        // the next one see an item as tierable when it is not.
+        TestTags.clear();
         ShippedDatapack.restoreShippedState();
     }
 
@@ -129,18 +133,49 @@ class TierServiceTest {
         this.service.replaceAll(List.of(
                 TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
                 TestTiers.tier("uncommon", TierDomain.WEAPON, 1, 25)));
+        TestTags.bindDomain(TierDomain.WEAPON, Items.IRON_SWORD);
 
         final Optional<TierDefinition> tier = this.service.resolveCurrentTier(new ItemStack(Items.IRON_SWORD), null);
 
         assertEquals(TestTiers.id("common"), tier.orElseThrow().id());
     }
 
+    /**
+     * Domain membership is the tag and nothing else. An iron sword in no tag carries no domain, even
+     * though it is a sword — which is the whole point of moving off the {@code instanceof} heuristic.
+     */
+    @Test
+    void anItemInNoTagCarriesNoDomainWhateverItsClass() {
+        this.service.replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0, 0)));
+        TestTags.clear();
+
+        assertTrue(this.service.inferDomains(Items.IRON_SWORD).isEmpty(),
+                "an iron sword outside every base tag is not a weapon");
+        assertEquals(Optional.empty(), this.service.resolveCurrentTier(new ItemStack(Items.IRON_SWORD), null));
+    }
+
+    /**
+     * The tag is the whole membership rule, so adding an item to it is the whole of making it
+     * tierable — including items no {@code instanceof} heuristic would ever have matched.
+     */
+    @Test
+    void anItemInTwoTagsBelongsToTwoDomains() {
+        this.service.replaceAll(List.of(
+                TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
+                TestTiers.tier("common", TierDomain.TOOL, 0, 0)));
+        TestTags.bindDomain(TierDomain.WEAPON, Items.IRON_AXE);
+        TestTags.bindDomain(TierDomain.TOOL, Items.IRON_AXE);
+
+        assertEquals(java.util.Set.of(TierDomain.WEAPON, TierDomain.TOOL), this.service.inferDomains(Items.IRON_AXE));
+    }
+
     @Test
     void itemsThatCannotCarryADomainGetNoTierAtAll() {
         this.service.replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0, 0)));
+        TestTags.clear();
 
         assertTrue(this.service.resolveCurrentTier(new ItemStack(Items.POTATO), null).isEmpty(),
-                "a potato is not a weapon, tool or armour piece");
+                "a potato is in no base tag, so it carries no domain");
     }
 
     @Test
@@ -165,7 +200,7 @@ class TierServiceTest {
             assertEquals(List.of("common", "uncommon", "rare", "epic"),
                     ordered.stream().map(tier -> tier.id().getPath()).toList(), domain.toString());
         }
-        assertEquals(16, this.service.getAllTiers().size());
+        assertEquals(TierDomain.builtinDomains().size() * 4, this.service.getAllTiers().size());
         assertEquals(new ResourceLocation("tieredechoes", "common"),
                 this.service.getTier(new ResourceLocation("tieredechoes", "common"), TierDomain.TOOL).orElseThrow().id());
     }

@@ -71,6 +71,15 @@ public final class ItemExperienceHandler {
         if (TierService.getInstance().inferDomains(chest.getItem()).contains(TierDomain.ELYTRA)) {
             UpgradeService.getInstance().addExperience(chest, 1);
         }
+        // getArmorSlots() deliberately covers only the four armour slots, so a shield held to block
+        // would otherwise earn nothing at all. The off-hand is read separately for the domains that
+        // actually live there rather than looping every held item, so a weapon in the off-hand does
+        // not earn twice — once here and once from the weapon path.
+        final ItemStack offhand = player.getOffhandItem();
+        final var offhandDomains = TierService.getInstance().inferDomains(offhand.getItem());
+        if (offhandDomains.contains(TierDomain.SHIELD) || offhandDomains.contains(TierDomain.RANGED_WEAPONS)) {
+            UpgradeService.getInstance().addExperience(offhand, 1);
+        }
     }
 
     @SubscribeEvent

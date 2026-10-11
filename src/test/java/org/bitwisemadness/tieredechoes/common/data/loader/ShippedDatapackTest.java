@@ -48,10 +48,10 @@ class ShippedDatapackTest {
     }
 
     @Test
-    void shipsALadderOfFourTiersInEachOfTheFourBuiltinDomains() {
+    void shipsALadderOfFourTiersInEachBuiltinDomain() {
         final List<TierDefinition> tiers = ShippedDatapack.load().tiers();
 
-        assertEquals(16, tiers.size());
+        assertEquals(TierDomain.builtinDomains().size() * 4, tiers.size());
         for (final TierDomain domain : TierDomain.builtinDomains()) {
             final List<TierDefinition> forDomain = tiers.stream().filter(tier -> tier.domain() == domain).toList();
             assertEquals(List.of("common", "uncommon", "rare", "epic"),
@@ -85,8 +85,8 @@ class ShippedDatapackTest {
     void shipsThreeTransitionsPerDomain() {
         final List<TierEdge> edges = ShippedDatapack.load().edges();
 
-        assertEquals(12, edges.size(),
-                "four domains of three linear steps: common to uncommon, uncommon to rare, rare to epic");
+        assertEquals(TierDomain.builtinDomains().size() * 3, edges.size(),
+                "every domain of three linear steps: common to uncommon, uncommon to rare, rare to epic");
         for (final TierDomain domain : TierDomain.builtinDomains()) {
             assertEquals(3, edges.stream().filter(edge -> edge.domain() == domain).count(), domain.toString());
         }
@@ -152,8 +152,12 @@ class ShippedDatapackTest {
 
         assertEquals(0, report.errorCount(), () -> "errors:\n" + describe(report));
         assertEquals(0, report.warningCount(), () -> "warnings:\n" + describe(report));
-        assertEquals(16, org.bitwisemadness.tieredechoes.common.tier.TierService.getInstance().getAllTiers().size());
-        assertEquals(12, org.bitwisemadness.tieredechoes.common.path.PathService.getInstance().getAllEdgesLike().size());
+        assertEquals(TierDomain.builtinDomains().size() * 4,
+                org.bitwisemadness.tieredechoes.common.tier.TierService.getInstance().getAllTiers().size());
+        assertEquals(TierDomain.builtinDomains().size() * 3,
+                org.bitwisemadness.tieredechoes.common.path.PathService.getInstance().getAllEdgesLike().size());
+        // Templates stay keyed by tier and direction rather than by domain, so their count tracks the
+        // number of tiers in a ladder and not the number of domains.
         assertEquals(8, org.bitwisemadness.tieredechoes.common.template.TemplateService.getInstance()
                 .declaredTemplates().size());
     }

@@ -41,4 +41,9 @@ final class GameTestTiers {
         // applyTier is functional: it hands back the tiered copy and leaves the argument alone.
         return UpgradeService.getInstance().applyTier(stack, tier(helper, TierDomain.WEAPON, path));
     }
+
+    /** A freshly placed item of the given domain carrying the given tier. */
+    static ItemStack tieredItem(final GameTestHelper helper, final TierDomain domain, final net.minecraft.world.item.Item item, final String path) {
+        return UpgradeService.getInstance().applyTier(new ItemStack(item), tier(helper, domain, path));
+    }
 }

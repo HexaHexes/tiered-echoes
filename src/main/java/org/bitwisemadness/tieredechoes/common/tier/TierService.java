@@ -3,21 +3,16 @@ package org.bitwisemadness.tieredechoes.common.tier;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ArmorItem;
-import net.minecraft.world.item.AxeItem;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.PickaxeItem;
-import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Rarity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.item.ShovelItem;
-import net.minecraft.world.item.HoeItem;
-import net.minecraft.world.item.SwordItem;
 import org.bitwisemadness.tieredechoes.api.common.ITierService;
+import org.bitwisemadness.tieredechoes.common.registry.TieredEchoesTagKeys;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -59,16 +54,14 @@ public final class TierService implements ITierService {
         }
     }
 
+    /**
+     * The items that can be previewed in a domain's creative tab: every registered item the domain's
+     * tag claims. There is no per-domain branch because there is no per-domain membership rule — the
+     * tag is the whole of it.
+     */
     @Override
     public synchronized List<Item> collectPreviewItems(final TierDomain domain) {
-        return switch (domain) {
-            case WEAPON -> registeredItemsFor(domain);
-            case TOOL -> registeredItemsFor(domain);
-            case ARMOR -> registeredItemsFor(domain);
-            case ELYTRA -> registeredItemsFor(domain);
-            case STORAGE -> registeredItemsFor(domain);
-            case ACCESSORY -> registeredItemsFor(domain);
-        };
+        return registeredItemsFor(domain);
     }
 
     @Override
@@ -142,21 +135,31 @@ public final class TierService implements ITierService {
         return this.inferDomains(item);
     }
 
+    /**
+     * The domains this item has a ladder in, decided solely by the {@code tieredechoes:<name>} item
+     * tags.
+     *
+     * <p>Membership is deliberately exclusive to the tags — there is no {@code instanceof} fallback,
+     * because a heuristic and a tag can disagree and then the answer depends on load order. An item
+     * in two tags belongs to two domains, so an axe is both a weapon and a tool and climbs each
+     * ladder independently.</p>
+     *
+     * <p>Iteration follows enum declaration order so that the result is deterministic. Callers such
+     * as {@link #resolveCurrentTier} pick the first element, which must not change between runs.</p>
+     */
     public synchronized Set<TierDomain> inferDomains(final Item item) {
+        if (item == null) {
+            return Set.of();
+        }
         final Set<TierDomain> domains = new LinkedHashSet<>();
-        if (item instanceof SwordItem || item instanceof AxeItem) {
-            domains.add(TierDomain.WEAPON);
+        for (final TierDomain domain : TierDomain.values()) {
+            final TagKey<Item> tag = TieredEchoesTagKeys.forDomain(domain).orElse(null);
+            if (tag != null && item.builtInRegistryHolder().is(tag)) {
+                domains.add(domain);
+            }
         }
-        if (item instanceof PickaxeItem || item instanceof ShovelItem || item instanceof AxeItem || item instanceof HoeItem) {
-            domains.add(TierDomain.TOOL);
-        }
-        if (item instanceof ArmorItem) {
-            domains.add(TierDomain.ARMOR);
-        }
-        if (isAccessoryItem(item)) {
-            domains.add(TierDomain.ACCESSORY);
-        }
-        return Set.copyOf(domains);
+        // Set.copyOf would discard the insertion order, so wrap instead.
+        return java.util.Collections.unmodifiableSet(domains);
     }
 
     public synchronized Map<String, Attribute> getScalableAttributes(final Item item) {
@@ -220,6 +223,31 @@ public final class TierService implements ITierService {
         return Optional.empty();
     }
 
+    /**
+     * Resolves a multiplier by plain string key, for the things that scale but are not attributes —
+     * durability, and later enchantability.
+     *
+     * <p>Shares the normalisation fallback with {@link #getAttributeMultiplier} so a datapack can
+     * spell a key as {@code durability}, {@code Durability} or {@code minecraft:durability} and get
+     * the same answer from either path.</p>
+     */
+    public Optional<Double> getScalarMultiplier(final TierDefinition tier, final String key) {
+        if (tier == null || key == null) {
+            return Optional.empty();
+        }
+        final Double direct = tier.attributeMultipliers().get(key);
+        if (direct != null) {
+            return Optional.of(direct);
+        }
+        final String normalized = normalizeMultiplierKey(key);
+        for (final Map.Entry<String, Double> entry : tier.attributeMultipliers().entrySet()) {
+            if (normalizeMultiplierKey(entry.getKey()).equals(normalized)) {
+                return Optional.of(entry.getValue());
+            }
+        }
+        return Optional.empty();
+    }
+
     public Set<String> getMultiplierKeyCandidates(final Attribute attribute) {
         final Set<String> candidates = new LinkedHashSet<>();
         final String canonical = getMultiplierKey(attribute);
@@ -274,79 +302,6 @@ public final class TierService implements ITierService {
                 || combined.contains("temperature_resistance")
                 || combined.contains("thermal.resistance")
                 || combined.contains("temperature.resistance");
-    }
-
-    private boolean isAccessoryItem(final Item item) {
-        if (item instanceof SwordItem || item instanceof AxeItem || item instanceof PickaxeItem || item instanceof ShovelItem || item instanceof HoeItem || item instanceof ArmorItem) {
-            return false;
-        }
-        if (!hasCuriosSlotTag(item)) {
-            return false;
-        }
-        return hasSupportedAccessoryStats(item);
-    }
-
-    private boolean hasCuriosSlotTag(final Item item) {
-        try {
-            return BuiltInRegistries.ITEM.wrapAsHolder(item)
-                    .tags()
-                    .map(TagKey::location)
-                    .anyMatch(location -> "curios".equals(location.getNamespace()));
-        } catch (RuntimeException exception) {
-            final ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
-            org.bitwisemadness.tieredechoes.TieredEchoes.LOGGER.debug("[TierService] Could not inspect Curios item tags for {}", id, exception);
-            return false;
-        }
-    }
-
-    private boolean hasSupportedAccessoryStats(final Item item) {
-        final Set<String> configuredKeys = new LinkedHashSet<>();
-        for (final TierDefinition tier : this.tiersByDomain.getOrDefault(TierDomain.ACCESSORY, List.of())) {
-            configuredKeys.addAll(tier.attributeMultipliers().keySet());
-        }
-        for (final Attribute attribute : getScalableAttributes(item).values()) {
-            for (final String candidate : getMultiplierKeyCandidates(attribute)) {
-                if (configuredKeys.contains(candidate) || configuredKeys.stream().map(this::normalizeMultiplierKey).anyMatch(normalizeMultiplierKey(candidate)::equals)) {
-                    return true;
-                }
-            }
-        }
-        return isKnownArsManaCurioItem(item) || isKnownLsoResistanceCurioItem(item);
-    }
-
-    private boolean isSupportedAccessoryAttributeKey(final String key) {
-        return key.equals("attack_damage")
-                || key.equals("attack_speed")
-                || key.equals("armor")
-                || key.equals("armor_toughness")
-                || key.equals("knockback_resistance")
-                || key.equals("max_mana")
-                || key.equals("mana_regen")
-                || key.equals("cold_resistance")
-                || key.equals("heat_resistance")
-                || key.equals("thermal_resistance");
-    }
-
-    private boolean isKnownArsManaCurioItem(final Item item) {
-        final ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
-        if (id == null || !"ars_nouveau".equals(id.getNamespace())) {
-            return false;
-        }
-        final String path = id.getPath().toLowerCase(Locale.ROOT);
-        final boolean likelyCurio = path.contains("ring") || path.contains("amulet") || path.contains("charm") || path.contains("belt") || path.contains("bauble") || path.contains("focus");
-        final boolean likelyMana = path.contains("mana") || path.contains("regen");
-        return likelyCurio && likelyMana;
-    }
-
-    private boolean isKnownLsoResistanceCurioItem(final Item item) {
-        final ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
-        if (id == null || !isLsoAttributeNamespace(id.getNamespace().toLowerCase(Locale.ROOT))) {
-            return false;
-        }
-        final String path = id.getPath().toLowerCase(Locale.ROOT);
-        final boolean likelyCurio = path.contains("ring") || path.contains("amulet") || path.contains("charm") || path.contains("bracelet") || path.contains("necklace");
-        final boolean likelyResistance = path.contains("cold") || path.contains("heat") || path.contains("thermal") || path.contains("temperature");
-        return likelyCurio && likelyResistance;
     }
 
     public synchronized List<TierDefinition> getAllTiers() {
@@ -462,6 +417,15 @@ public final class TierService implements ITierService {
                 if (path.startsWith("diamond_")) yield 4;
                 if (path.startsWith("netherite_")) yield 5;
                 if (path.equals("turtle_helmet")) yield 6;
+                yield 100;
+            }
+            // These domains have no material ladder in vanilla — one item each, or two where the
+            // second is strictly better — so the rank only has to keep them in a sensible order.
+            case SHIELD -> path.equals("shield") ? 0 : 100;
+            case ELYTRA -> path.equals("elytra") ? 0 : 100;
+            case RANGED_WEAPONS -> {
+                if (path.equals("bow")) yield 0;
+                if (path.equals("crossbow")) yield 1;
                 yield 100;
             }
             default -> 100;
