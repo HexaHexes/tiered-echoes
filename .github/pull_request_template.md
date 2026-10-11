@@ -9,6 +9,8 @@
 - [ ] `gradlew runGameTestServer` passes locally (assert on the
       `required tests passed` line — the exit code is not reliable)
 - [ ] Change is documented; README or `docs/` updated if user-facing
+- [ ] This PR adds a feature, or changes one `README.md` already describes,
+      and updates `README.md` in this PR
 - [ ] No logs, `run/`, or `crash-reports/` committed
 
 ## Breaking change

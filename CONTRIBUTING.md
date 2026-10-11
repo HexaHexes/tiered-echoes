@@ -71,11 +71,60 @@ who the change is for:
 | --- | --- |
 | Players and server operators | `README.md` |
 | Datapack authors | `docs/DATAPACK.md` |
+| Build, CI and releases | `docs/DEVELOPMENT.md` |
 | Contributors | this file |
 
 If a change is user-facing at all, it belongs in `README.md`. Internal
 refactors and test-only changes do not, and should not pad the README to look
 busy.
+
+### The README goes stale
+
+`README.md` is the mod's public description. It ships to CurseForge and it is
+what a player reads before deciding to install. It goes out of date the moment
+the mod changes shape, and a stale README is worse than a short one, because it
+describes features that no longer exist.
+
+**Any PR that adds a feature, or changes one the README already describes, must
+update the README in the same PR.** Not a follow-up, not an issue, the same PR,
+so that `main` never describes a mod that does not exist.
+
+It does not need to be long. Often it is one line. What it cannot be is absent.
+
+This one cannot be enforced by CI. There is no way to machine-judge whether a
+change is major enough to warrant it, so it is a checkbox plus a reviewer's
+attention, exactly like the `breaking` label. It will only hold if review
+actually looks for it.
+
+### Writing style
+
+`README.md` and `docs/` are read by players and pack makers who have never heard
+of the mod, and the obvious first draft reads like marketing copy. These rules
+keep it from doing that. They are guidance rather than a ban list, so that they
+still apply to phrasing nobody has thought of yet.
+
+- **Section headers are plain nouns.** `Progression`, `Tiers`, `Included`.
+  Not `Ranks you can feel`.
+- **No slogan fragments.** A sentence that could go on a poster, `Everything is
+  data.` or `Nothing else.`, is a slogan rather than information. Fold it into
+  the sentence next to it.
+- **No selling phrases.** `at a glance`, `exactly what you want`, `ready to
+  use`, `alongside it`. Describe what happens; do not promise how it feels.
+- **No intensifiers.** `really is`, `genuinely`, `actually`, `truly`. The claim
+  either stands on its own or it does not stand.
+- **No anthropomorphism.** Items do not live, know, learn or want things.
+- **Numbers as the data states them.** `1.4x attack damage`, not `40% more
+  damage`. A pack maker can match the ratio to the JSON; a percentage is a
+  sales conversion.
+- **Em dashes are not punctuation.** Use a comma, a colon, or two sentences.
+  The pre-rewrite README used 39 of them.
+- **Do not justify design decisions in player docs.** Explaining why a choice
+  was made reads as pre-empting criticism. `docs/DEVELOPMENT.md` is where the
+  reasoning about the build belongs; the README describes the mod.
+
+Spelling is American English throughout, so `armor` and `License`, matching
+Minecraft's own vocabulary.
+
 
 ## Breaking changes
 
