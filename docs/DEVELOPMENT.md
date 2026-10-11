@@ -79,7 +79,8 @@ pushes. See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full set of rules.
 
 ## Releases
 
-Every push to `main` publishes a release automatically. The kind depends on what the PR did;
+Every push to `main` runs the release workflow, but a push only publishes when the change calls
+for it — see [Turning off automatic alpha releases](#turning-off-automatic-alpha-releases).
 `mod_version` in `gradle.properties` is the sole source of truth, and nothing bumps it for you.
 
 | Change | Channel | Tag | CurseForge |
@@ -92,6 +93,20 @@ Every push to `main` publishes a release automatically. The kind depends on what
 Alphas are rolling builds of `main` and are published to GitHub only. A beta or stable bump
 must change `gradle.properties` and nothing else; combined with any other change, CI rejects
 it.
+
+### Turning off automatic alpha releases
+
+Alphas are **off unless enabled**. Set the `ALPHA_RELEASES` repository variable to `true`
+under *Settings → Secrets and variables → Actions → Variables* to publish them; unset, or any
+other value, skips the tag and the release. No workflow edit is needed to flip it.
+
+The switch gates the release only, never the build. The build, JUnit suite and GameTests still
+run on every push to `main`, which is deliberate: those are the only verification a merge
+receives, since CI runs against the pull request rather than the merge. A push that would have
+cut an alpha therefore still goes red if it breaks something, it simply publishes nothing.
+
+Beta and stable are unaffected in either direction, so cutting a real release never depends on
+the variable being set.
 
 To cut a release, edit `mod_version`, open a PR containing only that change, and merge it. The
 changelog is generated from commit subjects; for a stable release it spans back to the previous
