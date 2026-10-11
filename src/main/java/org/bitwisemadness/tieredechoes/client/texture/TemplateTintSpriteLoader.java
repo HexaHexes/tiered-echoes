@@ -8,6 +8,7 @@ import net.minecraft.client.resources.metadata.animation.AnimationMetadataSectio
 import net.minecraft.client.resources.metadata.animation.FrameSize;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.world.item.Rarity;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.RegisterTextureAtlasSpriteLoadersEvent;
@@ -21,6 +22,8 @@ import org.bitwisemadness.tieredechoes.common.rarity.TERarities;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * Builds every upgrade-template texture from the vanilla netherite upgrade template at load time.
@@ -47,20 +50,34 @@ public final class TemplateTintSpriteLoader implements ITextureAtlasSpriteLoader
     private static final ResourceLocation SOURCE_TEXTURE =
             new ResourceLocation("minecraft", "textures/item/netherite_upgrade_smithing_template.png");
 
+    /** The file-name prefix that marks a texture as belonging to the legendary rung. */
+    private static final String LEGENDARY_TIER = "legendary";
+
     /**
-     * Hue rotation and saturation scale per tier, in ladder order.
+     * Hue rotation and saturation scale per tier.
      *
-     * <p>The rotations were chosen so the resulting plate colour lands on the tier's own rarity —
-     * legendary rotates onto golden orange, matching {@link TERarities#LEGENDARY_COLOR}. Saturation
-     * is scaled rather than pinned so that a resource pack supplying a flatter or richer source
-     * still gets a flatter or richer result instead of an identical one.</p>
+     * <p>The rotations were chosen so the resulting plate colour lands on the tier's own rarity.
+     * Saturation is scaled rather than pinned so that a resource pack supplying a flatter or richer
+     * source still gets a flatter or richer result instead of an identical one.</p>
+     *
+     * <p>Legendary is missing from this table because its rarity is not ours to fix — see
+     * {@link #legendaryTint(NativeImage)}. Its saturation scale is carried separately by
+     * {@link #LEGENDARY_SATURATION_SCALE}, which both its outcomes share.</p>
      */
     private static final Map<String, Tint> TINTS = Map.of(
             "common", new Tint(200.0F, 0.55F),
             "uncommon", new Tint(105.0F, 1.10F),
             "rare", new Tint(195.0F, 1.15F),
-            "epic", new Tint(275.0F, 1.15F),
-            "legendary", new Tint(32.0F, 1.25F));
+            "epic", new Tint(275.0F, 1.15F));
+
+    /** Legendary's saturation scale, shared by the tuned fallback and by the followed hue. */
+    private static final float LEGENDARY_SATURATION_SCALE = 1.25F;
+
+    /**
+     * The tuned rotation onto {@link TERarities#LEGENDARY_COLOR}, used when legendary's rarity
+     * declares no hue worth following.
+     */
+    private static final Tint LEGENDARY_FALLBACK = new Tint(32.0F, LEGENDARY_SATURATION_SCALE);
 
     @SubscribeEvent
     public static void registerLoaders(final RegisterTextureAtlasSpriteLoadersEvent event) {
@@ -72,8 +89,9 @@ public final class TemplateTintSpriteLoader implements ITextureAtlasSpriteLoader
                                        final FrameSize frameSize, final NativeImage image,
                                        final AnimationMetadataSection animationMeta,
                                        final ForgeTextureMetadata forgeMeta) {
-        final Tint tint = TINTS.get(tierOf(name));
-        if (tint == null) {
+        final String tier = tierOf(name);
+        final Tint declared = TINTS.get(tier);
+        if (declared == null && !LEGENDARY_TIER.equals(tier)) {
             // A texture this loader does not own. Declaring the loader in its .mcmeta was a
             // mistake, but a mistake that should cost the texture its tint, not the game its boot.
             return new SpriteContents(name, frameSize, image, animationMeta, forgeMeta);
@@ -88,7 +106,7 @@ public final class TemplateTintSpriteLoader implements ITextureAtlasSpriteLoader
         // lifetime to whatever the loader returned. This close is therefore the only one it gets.
         // Idempotent, so a Forge that starts closing it too would not double-free.
         image.close();
-        shiftHue(source, tint);
+        shiftHue(source, LEGENDARY_TIER.equals(tier) ? legendaryTint(source) : declared);
         // Ownership passes to the SpriteContents, which closes what it holds when the atlas is
         // rebuilt. Closing here would hand the atlas a freed image.
         return new SpriteContents(name, new FrameSize(source.getWidth(), source.getHeight()),
@@ -162,6 +180,89 @@ public final class TemplateTintSpriteLoader implements ITextureAtlasSpriteLoader
                 image.setPixelRGBA(x, y, (alpha << 24) | (rgb[2] << 16) | (rgb[1] << 8) | rgb[0]);
             }
         }
+    }
+
+    /**
+     * The legendary tint, following whichever {@code LEGENDARY} constant won.
+     *
+     * <p>Legendary is the one rung whose rarity is not ours to fix. If another mod extended the enum
+     * before we did, {@code TERarities} reuses their constant, and theirs is the colour a player
+     * sees on the item name — so the plate follows it here rather than insisting on golden orange
+     * and disagreeing with the name directly above it.</p>
+     *
+     * <p>The rotation is measured against this source's own hue rather than against the vanilla
+     * template's. Hardcoding that would put the plate on the wrong colour the moment a resource pack
+     * restyles the template, which is the whole reason this loader reads through the resource
+     * manager in the first place.</p>
+     *
+     * <p>Only the hue is followed. Saturation stays tuned, because a 16px sprite needs the contrast
+     * to read as a template at all, and a desaturated rarity colour would give it a muddy plate.</p>
+     */
+    private static Tint legendaryTint(final NativeImage source) {
+        final float measured = measuredHue(source);
+        if (Float.isNaN(measured)) {
+            // No pixel carries a hue to rotate. Asking a flat grey plate to become a colour it has
+            // no channel to express would only drain it further.
+            return LEGENDARY_FALLBACK;
+        }
+        final float target = targetHue().orElse(LEGENDARY_FALLBACK.hueShift());
+        return new Tint(((target - measured) % 360.0F + 360.0F) % 360.0F, LEGENDARY_SATURATION_SCALE);
+    }
+
+    /**
+     * The hue legendary should land on, or empty when its rarity declares no followable colour.
+     *
+     * <p>An unsaturated rarity — white, grey or black — has no hue to follow, and picking one for it
+     * would be inventing a colour that mod never chose. Golden orange is the documented default, so
+     * it wins over a guess.</p>
+     */
+    private static Optional<Float> targetHue() {
+        final OptionalInt colour = TERarities.legendary().map(TERarities::colourOf).orElse(OptionalInt.empty());
+        if (colour.isEmpty()) {
+            return Optional.empty();
+        }
+        final int value = colour.getAsInt();
+        final float[] hsl = rgbToHsl((value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF);
+        return hsl[1] <= 0.0F ? Optional.empty() : Optional.of(hsl[0]);
+    }
+
+    /**
+     * The source texture's dominant hue, or NaN when it has none.
+     *
+     * <p>A weighted circular mean rather than an arithmetic one, for two reasons that both apply to
+     * this template specifically. Hue wraps at 360°, so averaging angles directly can land halfway
+     * round the wheel from where either input pointed; averaging unit vectors cannot. And the
+     * template is a maroon plate under a cyan arrow, which are near-complementary — an RGB average
+     * would collapse the pair toward grey. Weighting by saturation keeps unsaturated pixels from
+     * voting at all, and weighting by alpha keeps the transparent border from outweighing the plate
+     * it surrounds.</p>
+     */
+    private static float measuredHue(final NativeImage image) {
+        float sin = 0.0F;
+        float cos = 0.0F;
+        double weight = 0.0;
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                final int pixel = image.getPixelRGBA(x, y);
+                final int alpha = (pixel >>> 24) & 0xFF;
+                if (alpha == 0) {
+                    continue;
+                }
+                final float[] hsl = rgbToHsl(pixel & 0xFF, (pixel >>> 8) & 0xFF, (pixel >>> 16) & 0xFF);
+                if (hsl[1] <= 0.0F) {
+                    continue;
+                }
+                final double radians = Math.toRadians(hsl[0]);
+                final double contribution = hsl[1] * (alpha / 255.0F);
+                sin += (float) (Math.sin(radians) * contribution);
+                cos += (float) (Math.cos(radians) * contribution);
+                weight += contribution;
+            }
+        }
+        if (weight == 0.0) {
+            return Float.NaN;
+        }
+        return (float) ((Math.toDegrees(Math.atan2(sin, cos)) + 360.0F) % 360.0F);
     }
 
     /** {@code item/legendary_upgrade_template} to {@code legendary}. */

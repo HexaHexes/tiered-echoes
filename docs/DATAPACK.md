@@ -48,7 +48,7 @@ datapacks produce a warning naming the loser.
 | `id` | yes | Namespaced tier id. Scoped by domain — see below. |
 | `domain` | yes | `weapon`, `tool`, `armor`, `shield`, `ranged_weapons`, `elytra` or `accessory`. |
 | `schema_version` | no | Defaults to `1`. |
-| `display_rarity` | no | Vanilla `Rarity` name, plus `LEGENDARY`, which the mod adds as a golden orange above `EPIC`. Defaults to `COMMON`. An unrecognised name reads as `COMMON` rather than failing the reload. |
+| `display_rarity` | no | Vanilla `Rarity` name, plus `LEGENDARY`, which the mod adds above `EPIC`. Defaults to `COMMON`. An unrecognised name reads as `COMMON` rather than failing the reload. |
 | `sort_order` | no | Ladder position within the domain. Defaults to `0`. |
 | `experience_required` | no | Experience needed to reach this tier from the previous one. Defaults to `0`. |
 | `upgrade_ingredient` | no | Fallback smithing addition when the path edge declares none. |
@@ -60,6 +60,27 @@ datapacks produce a warning naming the loser.
 | `generated_upgrade_template` / `generated_downgrade_template` | no | Whether the conventional `<tier>_*_template` items exist. Both default to `true`. The shipped data sets `generated_downgrade_template` to `false`, because no downgrade item is registered. |
 | `upgrade_template_item_model` / `downgrade_template_item_model` | no | Override the template item's model. |
 | `upgrade_template_texture` / `downgrade_template_texture` | no | Override the template item's texture. |
+
+### The `LEGENDARY` rarity
+
+`LEGENDARY` is not a vanilla rarity, so the mod appends it to the enum as a golden orange
+(`#FFAA00`) above `EPIC` — unless it is already there. Forge lets any mod extend that enum, and
+appending a second constant under the same name would leave two rarity answers to one name while
+`Rarity.valueOf` resolves only the first, making ours unreachable. So the mod probes first and
+adopts whichever `LEGENDARY` arrived first, logging when it does.
+
+Two consequences follow for a pack that names it:
+
+- **The colour is not necessarily golden orange.** If another mod got there first, legendary items
+  take that rarity's colour, because that is what a player sees in the name above them.
+- **The legendary upgrade template follows it too.** Its texture is generated at load time by
+  rotating the vanilla netherite template's hue onto the rarity's own hue, so the plate agrees with
+  the name rather than fixing a colour of its own. A rarity declaring no colour — or only a grey
+  one — has no hue to follow, and the template falls back to golden orange.
+
+Rarities appended *after* this mod still collide; there is no registry to arbitrate that. It is
+worth checking whether a modpack's other addons already define `LEGENDARY` before assuming the
+golden orange shown here.
 
 **Tier ids are not globally unique.** `tieredechoes:rare` exists once per domain. Every lookup is
 scoped by `domain`, so an armor piece can never follow a weapon branch.
