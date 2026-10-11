@@ -37,6 +37,8 @@ public final class TierService implements ITierService {
     public static final String ROOT_TAG = "TieredEchoes";
     public static final String DOMAINS_TAG = "domains";
     public static final String TIER_ID_TAG = "tier_id";
+    public static final String DISPLAY_RARITY_TAG = "display_rarity";
+    public static final String SORT_ORDER_TAG = "tier_sort_order";
 
     private final Map<TierDomain, List<TierDefinition>> tiersByDomain = new EnumMap<>(TierDomain.class);
     private final Map<TierKey, TierDefinition> tiersByKey = new LinkedHashMap<>();

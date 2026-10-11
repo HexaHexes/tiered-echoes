@@ -378,8 +378,8 @@ public final class UpgradeService implements IUpgradeService {
         te.putInt("schema_version", tier.schemaVersion());
         final CompoundTag domainTag = this.domainTag(stack, tier.domain());
         domainTag.putString(TierService.TIER_ID_TAG, tier.id().toString());
-        domainTag.putString("display_rarity", tier.displayRarity().name());
-        domainTag.putInt("tier_sort_order", tier.sortOrder());
+        domainTag.putString(TierService.DISPLAY_RARITY_TAG, tier.displayRarity().name());
+        domainTag.putInt(TierService.SORT_ORDER_TAG, tier.sortOrder());
         domainTag.putBoolean("preview", preview);
         domainTag.putBoolean("generated_upgrade_template", tier.generatedUpgradeTemplate());
         domainTag.putBoolean("generated_downgrade_template", tier.generatedDowngradeTemplate());
