@@ -9,6 +9,8 @@ Common, Uncommon, Rare, Epic.
 Experience comes from use. Weapons earn it from the damage they deal, tools from the blocks
 they break, armor from the hits it takes.
 
+Hovering a tiered item shows how far it is from its next tier, as `Experience: 45 / 150`.
+
 An item upgrades once it holds enough experience for the next tier. It can also be upgraded by
 hand at a smithing table, using a template and the tier's ingredient. A datapack decides which
 of those routes is available; the default allows both. Every upgrade has a matching downgrade,
@@ -40,6 +42,21 @@ Where a tier leads to more than one higher tier, an item picks a branch when it 
 experience. You can choose one yourself instead, by shift-right-clicking the item while holding
 a matching ingredient in your offhand.
 
+## Gamerules
+
+Three gamerules control how progression behaves in a world. Each one starts from the matching
+value in `config/tieredechoes-common.toml`, so the config file is what a new world is created
+with. After that the gamerule is what you change, per world, with `/gamerule`.
+
+| Gamerule | Default | Effect |
+| --- | --- | --- |
+| `teItemExperience` | `true` | Whether items earn experience at all. Off leaves smithing progression intact. |
+| `teAutoUpgrade` | `true` | Whether experience alone advances an item's tier. Off makes the smithing table the only route. |
+| `teResetExperienceOnUpgrade` | `false` | Whether an upgrade spends the item's experience, rather than carrying the excess into the new tier. |
+
+Editing the config file does not change worlds that already exist, which is the point. Pacing is
+a decision about a world rather than about an installation.
+
 ## Included
 
 Four domains, `weapon`, `tool`, `armor` and `accessory`, each carrying the four tiers above,
@@ -61,8 +78,8 @@ you can copy and edit; see [docs/DATAPACK.md](https://github.com/HexaHexes/tiere
 Modded items become tierable by adding them to the base tag for their domain:
 `#tieredechoes:weapon_bases`, `#tieredechoes:tool_bases`, `#tieredechoes:armor_bases`.
 
-Pacing can be tuned in `config/tieredechoes-common.toml` without writing a datapack. Contributor
-documentation, including the build and release process, lives in
+Pacing starts in `config/tieredechoes-common.toml`, which supplies the value each gamerule is
+created with. Contributor documentation, including the build and release process, lives in
 [docs/DEVELOPMENT.md](https://github.com/HexaHexes/tiered-echoes/blob/main/docs/DEVELOPMENT.md).
 
 ## Requirements

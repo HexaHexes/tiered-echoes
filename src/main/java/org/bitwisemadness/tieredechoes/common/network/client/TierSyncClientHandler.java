@@ -19,6 +19,9 @@ public final class TierSyncClientHandler {
     public static void apply(final TierDataSyncPacket packet) {
         TierService.getInstance().replaceAll(packet.tiers());
         PolicyService.getInstance().replace(packet.policy());
-        TieredEchoes.LOGGER.debug("Applied synced tier ladder: {} tiers", packet.tiers().size());
+        SyncedProgressionState.apply(packet.itemExperienceEnabled(), packet.autoUpgradeEnabled(),
+                packet.resetExperienceOnUpgrade(), packet.displayEdges());
+        TieredEchoes.LOGGER.debug("Applied synced tier ladder: {} tiers, {} edges",
+                packet.tiers().size(), packet.displayEdges().size());
     }
 }

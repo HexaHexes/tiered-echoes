@@ -1,6 +1,8 @@
 package org.bitwisemadness.tieredechoes.common;
 
 import com.google.common.collect.Multimap;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.item.ItemStack;
@@ -12,14 +14,19 @@ import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
+import org.bitwisemadness.tieredechoes.common.experience.ExperienceTooltip;
+import org.bitwisemadness.tieredechoes.common.network.client.DisplayEdge;
+import org.bitwisemadness.tieredechoes.common.network.client.SyncedProgressionState;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
 import org.bitwisemadness.tieredechoes.common.upgrade.UpgradeService;
 
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -191,10 +198,37 @@ public final class CommonForgeEvents {
         @SubscribeEvent
         public static void onItemTooltip(final ItemTooltipEvent event) {
             final ItemStack stack = event.getItemStack();
-            final var tierOpt = UpgradeService.getInstance().getCurrentTier(stack);
-            if (tierOpt.isPresent()) {
-                TieredEchoes.LOGGER.debug("[CommonForgeEvents] Tiered stack tooltip observed for {} tier {}", stack.getItem(), tierOpt.get().id());
+            final UpgradeService upgrade = UpgradeService.getInstance();
+            final Optional<TierDefinition> tierOpt = upgrade.getCurrentTier(stack);
+            if (tierOpt.isEmpty()) {
+                return;
             }
+            final TierDefinition tier = tierOpt.get();
+            TieredEchoes.LOGGER.debug("[CommonForgeEvents] Tiered stack tooltip observed for {} tier {}",
+                    stack.getItem(), tier.id());
+
+            // The gamerule is per-world and vanilla gives a client no way to read it, so the value
+            // shown here arrived over the mod's own sync channel. See SyncedProgressionState.
+            if (!SyncedProgressionState.itemExperienceEnabled()) {
+                return;
+            }
+
+            final List<Integer> costs = new ArrayList<>(2);
+            for (final DisplayEdge edge : SyncedProgressionState.nextEdges(tier.id(), tier.domain())) {
+                final Optional<Integer> override = edge.experienceRequirementOverride();
+                if (override.isPresent()) {
+                    costs.add(override.get());
+                    continue;
+                }
+                // A target the datapack no longer defines is skipped rather than treated as free.
+                TierService.getInstance().getTier(edge.to(), edge.domain())
+                        .map(TierDefinition::experienceRequired)
+                        .ifPresent(costs::add);
+            }
+
+            ExperienceTooltip.nextThreshold(costs).ifPresent(threshold -> event.getToolTip().add(
+                    Component.literal(ExperienceTooltip.format(upgrade.getStoredExperience(stack), threshold))
+                            .withStyle(ChatFormatting.DARK_GRAY)));
         }
     }
 }

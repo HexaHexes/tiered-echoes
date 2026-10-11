@@ -6,14 +6,22 @@ public final class TieredEchoesConfig {
     private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
 
     public static final ForgeConfigSpec.BooleanValue ENABLE_ITEM_XP = BUILDER
-            .comment("Whether the optional item experience system is enabled globally.",
+            .comment("Default for the teItemExperience gamerule on world creation.",
                     "This is the operator's master switch; which routes progression takes is decided by tier_policies.")
             .define("item_xp.enabled", true);
 
     public static final ForgeConfigSpec.BooleanValue ENABLE_AUTO_UPGRADE_SINGLE_PATH = BUILDER
-            .comment("Whether XP-enabled items should upgrade automatically when only one valid next path exists.",
+            .comment("Default for the teAutoUpgrade gamerule on world creation.",
+                    "Whether XP-enabled items should upgrade automatically when only one valid next path exists.",
                     "Kept as a config because it is a pacing choice an operator may want to tune without a datapack.")
             .define("item_xp.auto_upgrade_single_path", true);
+
+    public static final ForgeConfigSpec.BooleanValue RESET_EXPERIENCE_ON_UPGRADE = BUILDER
+            .comment("Default for the teResetExperienceOnUpgrade gamerule on world creation.",
+                    "Whether an upgrade spends the item's whole experience pool, rather than carrying",
+                    "the excess over to the new tier. The inverse of the carry_over_excess_xp field",
+                    "in tier_policies; where the two disagree, the gamerule wins.")
+            .define("item_xp.reset_experience_on_upgrade", false);
 
     public static final ForgeConfigSpec.BooleanValue CONSUME_ATTUNEMENT_ITEM = BUILDER
             .comment("Whether shift-right-click attunement consumes the offhand ingredient.",

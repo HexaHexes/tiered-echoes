@@ -11,7 +11,10 @@ import java.util.Optional;
  *
  * @param mode                 which progression routes are available
  * @param multiPathResolution  how a branch is chosen when several are eligible and none is attuned
- * @param carryOverExcessXp    whether xp left over after an upgrade is kept rather than spent
+ * @param carryOverExcessXp    <b>Superseded.</b> Whether xp left over after an upgrade is kept
+ *                             rather than spent is now the {@code teResetExperienceOnUpgrade}
+ *                             gamerule, and the gamerule wins. The field is still parsed so
+ *                             existing packs keep loading, but it no longer reaches gameplay.
  * @param disableUpgradeRecipes explicit kill-switch that applies on top of {@code mode}
  * @param consumeAttunementItem {@code null} means "defer to the server config file"
  */
