@@ -1,0 +1,20 @@
+# EditorConfig is what actually pins the encoding, and it is needed here for a
+# specific reason. These workflow files are pure ASCII, so every charset decodes
+# them and an editor's auto-detect has nothing in the bytes to disambiguate
+# against. IntelliJ falls back to detection for any file without a saved
+# per-file association, and for a BOM-less ASCII file that detection can land on
+# UTF-16LE - which renders the file as CJK garbage and then refuses to reload it
+# as UTF-8, on the grounds that the buffer is "already" UTF-16LE.
+#
+# A per-file association in .idea/encodings.xml fixes one file on one machine.
+# This fixes the class: any workflow file added later gets UTF-8 without anyone
+# having to notice a problem first.
+root = true
+
+[.github/**]
+charset = utf-8
+insert_final_newline = true
+
+# Deliberately no end_of_line rule. Line endings are a separate question from
+# character encoding, and pinning them here would silently reformat every file
+# under .github/ in every editor. Decide that on its own, in .gitattributes.
