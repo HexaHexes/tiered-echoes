@@ -4,9 +4,10 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.ItemStack;
 import org.bitwisemadness.tieredechoes.api.common.IUpgradeService;
-import org.bitwisemadness.tieredechoes.common.config.TieredEchoesConfig;
+import org.bitwisemadness.tieredechoes.common.gamerule.ProgressionRules;
 import org.bitwisemadness.tieredechoes.common.path.PathService;
 import org.bitwisemadness.tieredechoes.common.path.TierEdge;
 import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
@@ -107,8 +108,12 @@ public final class UpgradeService implements IUpgradeService {
         return true;
     }
 
+    /**
+     * Adds experience to a stack. Callers gate on the {@code teItemExperience} gamerule, which is
+     * per-world, so this only rejects an empty stack or a non-positive amount.
+     */
     public void addExperience(final ItemStack stack, final int amount) {
-        if (stack.isEmpty() || amount <= 0 || !TieredEchoesConfig.ENABLE_ITEM_XP.get()) {
+        if (stack.isEmpty() || amount <= 0) {
             return;
         }
         final int next = this.getStoredExperience(stack) + amount;
@@ -147,9 +152,16 @@ public final class UpgradeService implements IUpgradeService {
         te.remove("selected_branch_source");
     }
 
-    public Optional<ItemStack> tryAutoUpgrade(final ItemStack stack) {
+    public Optional<ItemStack> tryAutoUpgrade(final ItemStack stack, final MinecraftServer server) {
+        return this.tryAutoUpgrade(stack, ProgressionRules.from(server));
+    }
+
+    public Optional<ItemStack> tryAutoUpgrade(final ItemStack stack, final ProgressionRules rules) {
         final TierPolicy policy = PolicyService.getInstance().get();
-        if (stack.isEmpty() || !TieredEchoesConfig.ENABLE_ITEM_XP.get() || !policy.autoUpgradeEnabled()) {
+        if (stack.isEmpty()
+                || !rules.itemExperience()
+                || !rules.autoUpgrade()
+                || !policy.autoUpgradeEnabled()) {
             return Optional.empty();
         }
         final Optional<TierDefinition> current = this.getCurrentTier(stack);
@@ -173,10 +185,7 @@ public final class UpgradeService implements IUpgradeService {
             if (currentXp < required) {
                 return Optional.empty();
             }
-            return Optional.of(this.finishUpgrade(stack, target, edge, required));
-        }
-        if (!TieredEchoesConfig.ENABLE_AUTO_UPGRADE_SINGLE_PATH.get() && selectedBranch.isEmpty()) {
-            return Optional.empty();
+            return Optional.of(this.finishUpgrade(stack, target, edge, required, rules));
         }
         final List<TierEdge> eligible = new ArrayList<>();
         for (final TierEdge edge : nextEdges) {
@@ -206,17 +215,20 @@ public final class UpgradeService implements IUpgradeService {
             return Optional.empty();
         }
         final int required = chosen.effectiveExperienceRequirement(target.experienceRequired());
-        return Optional.of(this.finishUpgrade(stack, target, chosen, required));
+        return Optional.of(this.finishUpgrade(stack, target, chosen, required, rules));
     }
 
-    private ItemStack finishUpgrade(final ItemStack stack, final TierDefinition target, final TierEdge chosen, final int requiredXp) {
+    private ItemStack finishUpgrade(final ItemStack stack, final TierDefinition target,
+                                    final TierEdge chosen, final int requiredXp, final ProgressionRules rules) {
         final ItemStack copy = stack.copy();
         final int currentXp = this.getStoredExperience(copy);
-        // carry_over_excess_xp=false makes the upgrade spend the whole pool, which is the pacing lever
-        // a datapack reaches for when automatic progression feels too fast.
-        final int remainder = PolicyService.getInstance().get().carryOverExcessXp()
-                ? Math.max(0, currentXp - requiredXp)
-                : 0;
+        // teResetExperienceOnUpgrade makes the upgrade spend the whole pool, which is the pacing
+        // lever an operator reaches for when automatic progression feels too fast. The datapack's
+        // carry_over_excess_xp field is superseded by this: a world is a better place to express
+        // pacing than the shared ladder a pack author ships to everyone.
+        final int remainder = rules.resetExperienceOnUpgrade()
+                ? 0
+                : Math.max(0, currentXp - requiredXp);
         this.writeTierState(copy, target, false);
         this.setStoredExperience(copy, remainder);
         this.clearSelectedBranch(copy);

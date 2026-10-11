@@ -1,6 +1,8 @@
 package org.bitwisemadness.tieredechoes.common.experience;
 
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -12,7 +14,7 @@ import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
-import org.bitwisemadness.tieredechoes.common.config.TieredEchoesConfig;
+import org.bitwisemadness.tieredechoes.common.gamerule.TEGameRules;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
 import org.bitwisemadness.tieredechoes.common.upgrade.UpgradeService;
@@ -25,7 +27,7 @@ public final class ItemExperienceHandler {
 
     @SubscribeEvent
     public static void onAttackEntity(final AttackEntityEvent event) {
-        if (!TieredEchoesConfig.ENABLE_ITEM_XP.get()) {
+        if (!itemExperienceEnabled(event.getEntity())) {
             return;
         }
         final ItemStack mainHand = event.getEntity().getMainHandItem();
@@ -36,7 +38,7 @@ public final class ItemExperienceHandler {
 
     @SubscribeEvent
     public static void onBlockBreak(final BlockEvent.BreakEvent event) {
-        if (!TieredEchoesConfig.ENABLE_ITEM_XP.get() || event.getPlayer() == null) {
+        if (event.getPlayer() == null || !itemExperienceEnabled(event.getPlayer())) {
             return;
         }
         final ItemStack mainHand = event.getPlayer().getMainHandItem();
@@ -47,10 +49,7 @@ public final class ItemExperienceHandler {
 
     @SubscribeEvent
     public static void onLivingDeath(final LivingDeathEvent event) {
-        if (!TieredEchoesConfig.ENABLE_ITEM_XP.get()) {
-            return;
-        }
-        if (event.getSource().getEntity() instanceof ServerPlayer player) {
+        if (event.getSource().getEntity() instanceof ServerPlayer player && itemExperienceEnabled(player)) {
             final ItemStack mainHand = player.getMainHandItem();
             if (TierService.getInstance().inferDomains(mainHand.getItem()).contains(TierDomain.WEAPON)) {
                 UpgradeService.getInstance().addExperience(mainHand, 5);
@@ -60,7 +59,7 @@ public final class ItemExperienceHandler {
 
     @SubscribeEvent
     public static void onLivingHurt(final LivingHurtEvent event) {
-        if (!TieredEchoesConfig.ENABLE_ITEM_XP.get() || !(event.getEntity() instanceof ServerPlayer player)) {
+        if (!(event.getEntity() instanceof ServerPlayer player) || !itemExperienceEnabled(player)) {
             return;
         }
         for (final ItemStack armor : player.getArmorSlots()) {
@@ -76,7 +75,9 @@ public final class ItemExperienceHandler {
 
     @SubscribeEvent
     public static void onPlayerTick(final TickEvent.PlayerTickEvent event) {
-        if (!TieredEchoesConfig.ENABLE_ITEM_XP.get() || event.phase != TickEvent.Phase.END || event.player.level().isClientSide) {
+        if (event.phase != TickEvent.Phase.END
+                || event.player.level().isClientSide
+                || !itemExperienceEnabled(event.player)) {
             return;
         }
         tryUpgrade(event.player.getMainHandItem(), event.player);
@@ -87,10 +88,20 @@ public final class ItemExperienceHandler {
     }
 
     private static void tryUpgrade(final ItemStack stack, final LivingEntity holder) {
-        final var result = UpgradeService.getInstance().tryAutoUpgrade(stack);
+        final var result = UpgradeService.getInstance().tryAutoUpgrade(stack, holder.getServer());
         if (result.isPresent()) {
             stack.setTag(result.get().getTag() == null ? null : result.get().getTag().copy());
             PlayerMessageUtil.actionBar(holder, UpgradeService.getInstance().describeStack(stack));
         }
+    }
+
+    /**
+     * The master switch is a gamerule rather than a config value, because whether a world wants
+     * item experience is a decision about that world. The config file only supplies the value a
+     * new world is created with; changing it later does not reach worlds that already exist.
+     */
+    private static boolean itemExperienceEnabled(final Entity source) {
+        final MinecraftServer server = source.getServer();
+        return server == null || TEGameRules.itemExperienceEnabled(server);
     }
 }

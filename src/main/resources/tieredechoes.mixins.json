@@ -6,7 +6,9 @@
   "refmap": "tieredechoes.refmap.json",
   "mixins": [
     "ItemStackRarityMixin",
-    "ItemStackNameMixin"
+    "ItemStackNameMixin",
+    "GameRulesAccessor",
+    "BooleanValueAccessor"
   ],
   "client": [],
   "server": [],

@@ -3,7 +3,7 @@ package org.bitwisemadness.tieredechoes.common.upgrade;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import org.bitwisemadness.tieredechoes.common.config.TieredEchoesConfig;
+import org.bitwisemadness.tieredechoes.common.gamerule.ProgressionRules;
 import org.bitwisemadness.tieredechoes.common.data.loader.ShippedDatapack;
 import org.bitwisemadness.tieredechoes.common.path.PathService;
 import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
@@ -119,7 +119,7 @@ class UpgradeServiceTest {
         final ItemStack stack = atTier("alpha");
         this.service.setStoredExperience(stack, BETA_REQUIRED_XP - 1);
 
-        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack));
+        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()));
         assertEquals(TierDomain.WEAPON, this.service.getCurrentTier(stack).orElseThrow().domain());
         assertEquals(TestTiers.id("alpha"), this.service.getCurrentTier(stack).orElseThrow().id());
     }
@@ -129,7 +129,7 @@ class UpgradeServiceTest {
         final ItemStack stack = atTier("alpha");
         this.service.setStoredExperience(stack, BETA_REQUIRED_XP);
 
-        final ItemStack upgraded = this.service.tryAutoUpgrade(stack).orElseThrow();
+        final ItemStack upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
 
         assertEquals(TestTiers.id("beta"), this.service.getCurrentTier(upgraded).orElseThrow().id());
         assertEquals(Items.IRON_SWORD, upgraded.getItem(), "tier changes, material does not");
@@ -141,22 +141,42 @@ class UpgradeServiceTest {
         final ItemStack stack = atTier("alpha");
         this.service.setStoredExperience(stack, BETA_REQUIRED_XP + 35);
 
-        final ItemStack upgraded = this.service.tryAutoUpgrade(stack).orElseThrow();
+        final ItemStack upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
 
         assertEquals(35, this.service.getStoredExperience(upgraded));
     }
 
+    /**
+     * {@code carry_over_excess_xp} in {@code tier_policies} used to own this. It no longer does.
+     * Pacing is a decision about a world rather than about the ladder a pack author ships to
+     * everyone, so the gamerule wins and the datapack field no longer reaches gameplay.
+     */
     @Test
-    void carryOverCanBeSwitchedOffByThePolicy() {
+    void theDatapackCarryOverFieldNoLongerOverridesTheGamerule() {
         PolicyService.getInstance().replace(new TierPolicy(TierPolicy.Mode.HYBRID, TierPolicy.MultiPathResolution.RANDOM,
                 false, false, null));
         final ItemStack stack = atTier("alpha");
         this.service.setStoredExperience(stack, BETA_REQUIRED_XP + 35);
 
-        final ItemStack upgraded = this.service.tryAutoUpgrade(stack).orElseThrow();
+        final ItemStack upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
 
-        assertEquals(0, this.service.getStoredExperience(upgraded),
-                "carry_over_excess_xp=false is the pacing lever for datapacks that find xp too fast");
+        assertEquals(35, this.service.getStoredExperience(upgraded),
+                "the gamerule wins, so a datapack asking for a reset has no effect");
+    }
+
+    /** The datapack asking to keep the excess must not block an operator from spending it. */
+    @Test
+    void theGameruleResetsThePoolWhateverThePolicyAsksFor() {
+        PolicyService.getInstance().replace(new TierPolicy(TierPolicy.Mode.HYBRID, TierPolicy.MultiPathResolution.RANDOM,
+                true, false, null));
+        final ItemStack stack = atTier("alpha");
+        this.service.setStoredExperience(stack, BETA_REQUIRED_XP + 35);
+
+        final ItemStack upgraded = this.service
+                .tryAutoUpgrade(stack, new ProgressionRules(true, true, true))
+                .orElseThrow();
+
+        assertEquals(0, this.service.getStoredExperience(upgraded));
     }
 
     @Test
@@ -164,7 +184,7 @@ class UpgradeServiceTest {
         final ItemStack stack = atTier("alpha");
         this.service.setStoredExperience(stack, BETA_REQUIRED_XP);
 
-        final ItemStack upgraded = this.service.tryAutoUpgrade(stack).orElseThrow();
+        final ItemStack upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
 
         assertNotSame(stack, upgraded);
         assertEquals(TestTiers.id("alpha"), this.service.getCurrentTier(stack).orElseThrow().id(),
@@ -271,7 +291,7 @@ class UpgradeServiceTest {
         this.service.attuneStack(stack, new ItemStack(Items.IRON_INGOT));
         this.service.setStoredExperience(stack, BETA_REQUIRED_XP);
 
-        final ItemStack upgraded = this.service.tryAutoUpgrade(stack).orElseThrow();
+        final ItemStack upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
 
         assertTrue(this.service.getSelectedBranchId(upgraded).isEmpty(),
                 "leaving the branch selection on the item would pin its next upgrade too");
@@ -284,7 +304,7 @@ class UpgradeServiceTest {
         this.service.attuneStack(stack, new ItemStack(Items.IRON_INGOT));
         this.service.setStoredExperience(stack, BETA_REQUIRED_XP);
 
-        final ItemStack upgraded = this.service.tryAutoUpgrade(stack).orElseThrow();
+        final ItemStack upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
 
         assertEquals(Optional.of("branch_alpha_beta"),
                 Optional.of(upgraded.getTag().getCompound("TieredEchoes").getString("last_branch_id")));
@@ -297,7 +317,7 @@ class UpgradeServiceTest {
         stack.getOrCreateTagElement("TieredEchoes").putString("selected_branch_id", "branch_beta_gamma");
         this.service.setStoredExperience(stack, BETA_REQUIRED_XP);
 
-        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack));
+        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()));
         assertEquals(Optional.of("branch_beta_gamma"), this.service.getSelectedBranchId(stack),
                 "an unresolvable selection is left alone so the player can see what is wrong");
     }
@@ -319,21 +339,56 @@ class UpgradeServiceTest {
 
     @Test
     void nothingAdvancesWhileTheXpSystemIsSwitchedOff() {
-        TieredEchoesConfig.ENABLE_ITEM_XP.set(false);
         final ItemStack stack = atTier("alpha");
         this.service.setStoredExperience(stack, BETA_REQUIRED_XP * 10);
 
-        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack));
+        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, new ProgressionRules(false, true, false)));
         assertEquals(TestTiers.id("alpha"), this.service.getCurrentTier(stack).orElseThrow().id());
     }
 
     @Test
     void nothingAdvancesWhileXpIsSwitchedOffEvenForTheSinglePathCase() {
-        TieredEchoesConfig.ENABLE_ITEM_XP.set(false);
         final ItemStack stack = atTier("beta");
         this.service.setStoredExperience(stack, GAMMA_REQUIRED_XP);
 
-        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack));
+        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, new ProgressionRules(false, true, false)));
+    }
+
+    /** teAutoUpgrade is the whole switch, not only the ambiguous multi-path case. */
+    @Test
+    void nothingAdvancesWhileAutoUpgradeIsSwitchedOffEvenWithPlentyOfExperience() {
+        final ItemStack stack = atTier("alpha");
+        this.service.setStoredExperience(stack, BETA_REQUIRED_XP * 10);
+
+        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, new ProgressionRules(true, false, false)));
+        assertEquals(TestTiers.id("alpha"), this.service.getCurrentTier(stack).orElseThrow().id());
+    }
+
+    /** teResetExperienceOnUpgrade spends the pool instead of carrying the excess over. */
+    @Test
+    void resettingExperienceOnUpgradeSpendsTheWholePool() {
+        final ItemStack stack = atTier("alpha");
+        this.service.setStoredExperience(stack, BETA_REQUIRED_XP + 40);
+
+        final ItemStack upgraded = this.service
+                .tryAutoUpgrade(stack, new ProgressionRules(true, true, true))
+                .orElseThrow();
+
+        assertEquals(TestTiers.id("beta"), this.service.getCurrentTier(upgraded).orElseThrow().id());
+        assertEquals(0, this.service.getStoredExperience(upgraded));
+    }
+
+    /** The default keeps the excess, which is what every earlier build did. */
+    @Test
+    void carryingExperienceOverKeepsTheExcessByDefault() {
+        final ItemStack stack = atTier("alpha");
+        this.service.setStoredExperience(stack, BETA_REQUIRED_XP + 40);
+
+        final ItemStack upgraded = this.service
+                .tryAutoUpgrade(stack, ProgressionRules.defaults())
+                .orElseThrow();
+
+        assertEquals(40, this.service.getStoredExperience(upgraded));
     }
 
     @Test
@@ -343,7 +398,7 @@ class UpgradeServiceTest {
         final ItemStack stack = atTier("alpha");
         this.service.setStoredExperience(stack, BETA_REQUIRED_XP * 10);
 
-        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack));
+        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()));
     }
 
     @Test
@@ -354,7 +409,7 @@ class UpgradeServiceTest {
         this.service.setStoredExperience(stack, BETA_REQUIRED_XP);
 
         assertEquals(TestTiers.id("beta"),
-                this.service.getCurrentTier(this.service.tryAutoUpgrade(stack).orElseThrow()).orElseThrow().id());
+                this.service.getCurrentTier(this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow()).orElseThrow().id());
     }
 
     @Test
@@ -362,7 +417,7 @@ class UpgradeServiceTest {
         final ItemStack stack = atTier("gamma");
         this.service.setStoredExperience(stack, 10_000);
 
-        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack));
+        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()));
         assertEquals(TestTiers.id("gamma"), this.service.getCurrentTier(stack).orElseThrow().id());
     }
 
