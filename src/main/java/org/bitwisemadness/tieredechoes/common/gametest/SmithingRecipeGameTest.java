@@ -61,7 +61,7 @@ public final class SmithingRecipeGameTest {
     public static void aSmithingUpgradeCarriesOverExperienceAndEnchantments(final GameTestHelper helper) {
         final TierTransitionRecipe upgrade = recipe(helper, UPGRADE);
         final ItemStack base = GameTestTiers.tieredSword(helper, "common");
-        UpgradeService.getInstance().setStoredExperience(base, 55);
+        UpgradeService.getInstance().setStoredExperience(base, TierDomain.WEAPON, 55);
         base.enchant(Enchantments.SHARPNESS, 3);
         base.setDamageValue(11);
         helper.assertTrue(upgrade.isBaseIngredient(base),
@@ -77,12 +77,12 @@ public final class SmithingRecipeGameTest {
         helper.assertTrue(result.getItem() == Items.IRON_SWORD, "the material must not change");
         helper.assertTrue(currentTierId(result).filter(GameTestTiers.tierId("uncommon")::equals).isPresent(),
                 "expected the item to land on uncommon but it is on " + currentTierId(result));
-        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(result) == 55,
+        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(result, TierDomain.WEAPON) == 55,
                 "stored experience must survive a material upgrade");
         helper.assertTrue(EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, result) == 3,
                 "enchantments must survive a material upgrade");
         helper.assertTrue(result.getDamageValue() == 11, "durability must survive a material upgrade");
-        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(base) == 55
+        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(base, TierDomain.WEAPON) == 55
                         && currentTierId(base).filter(GameTestTiers.tierId("common")::equals).isPresent(),
                 "the stack sitting in the slot must be left untouched");
         helper.succeed();
@@ -124,7 +124,7 @@ public final class SmithingRecipeGameTest {
     public static void aDowngradeStepsBackWithoutPunishingProgress(final GameTestHelper helper) {
         final TierTransitionRecipe downgrade = recipe(helper, DOWNGRADE);
         final ItemStack base = GameTestTiers.tieredSword(helper, "uncommon");
-        UpgradeService.getInstance().setStoredExperience(base, 55);
+        UpgradeService.getInstance().setStoredExperience(base, TierDomain.WEAPON, 55);
         base.enchant(Enchantments.SHARPNESS, 3);
         helper.assertTrue(downgrade.isBaseIngredient(base), "an iron sword should satisfy the weapon base tag");
 
@@ -137,7 +137,7 @@ public final class SmithingRecipeGameTest {
 
         helper.assertTrue(currentTierId(result).filter(GameTestTiers.tierId("common")::equals).isPresent(),
                 "expected the item to step back to common but it is on " + currentTierId(result));
-        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(result) == 55,
+        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(result, TierDomain.WEAPON) == 55,
                 "a downgrade is a route back down, not a punishment");
         helper.assertTrue(EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, result) == 3,
                 "enchantments must survive a downgrade too");

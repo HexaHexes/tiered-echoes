@@ -20,6 +20,15 @@ import org.bitwisemadness.tieredechoes.common.tier.TierService;
 import org.bitwisemadness.tieredechoes.common.upgrade.UpgradeService;
 import org.bitwisemadness.tieredechoes.common.util.PlayerMessageUtil;
 
+/**
+ * Awards experience to the ladder the action actually fed.
+ *
+ * <p>Every award names a domain, because an axe in both the weapon and tool tags climbs both: kills
+ * feed its weapon ladder, mining feeds its tool ladder, and neither may advance the other. The
+ * membership test is {@code contains(domain)} rather than a single inferred domain so that a shield
+ * blocking in the off-hand credits the shield ladder even when the same item also sits in another
+ * tag.</p>
+ */
 @Mod.EventBusSubscriber(modid = TieredEchoes.MOD_ID)
 public final class ItemExperienceHandler {
     private ItemExperienceHandler() {
@@ -31,9 +40,7 @@ public final class ItemExperienceHandler {
             return;
         }
         final ItemStack mainHand = event.getEntity().getMainHandItem();
-        if (TierService.getInstance().inferDomains(mainHand.getItem()).contains(TierDomain.WEAPON)) {
-            UpgradeService.getInstance().addExperience(mainHand, 1);
-        }
+        award(mainHand, TierDomain.WEAPON, 1);
     }
 
     @SubscribeEvent
@@ -41,19 +48,13 @@ public final class ItemExperienceHandler {
         if (event.getPlayer() == null || !itemExperienceEnabled(event.getPlayer())) {
             return;
         }
-        final ItemStack mainHand = event.getPlayer().getMainHandItem();
-        if (TierService.getInstance().inferDomains(mainHand.getItem()).contains(TierDomain.TOOL)) {
-            UpgradeService.getInstance().addExperience(mainHand, 1);
-        }
+        award(event.getPlayer().getMainHandItem(), TierDomain.TOOL, 1);
     }
 
     @SubscribeEvent
     public static void onLivingDeath(final LivingDeathEvent event) {
         if (event.getSource().getEntity() instanceof ServerPlayer player && itemExperienceEnabled(player)) {
-            final ItemStack mainHand = player.getMainHandItem();
-            if (TierService.getInstance().inferDomains(mainHand.getItem()).contains(TierDomain.WEAPON)) {
-                UpgradeService.getInstance().addExperience(mainHand, 5);
-            }
+            award(player.getMainHandItem(), TierDomain.WEAPON, 5);
         }
     }
 
@@ -63,23 +64,17 @@ public final class ItemExperienceHandler {
             return;
         }
         for (final ItemStack armor : player.getArmorSlots()) {
-            if (TierService.getInstance().inferDomains(armor.getItem()).contains(TierDomain.ARMOR)) {
-                UpgradeService.getInstance().addExperience(armor, 1);
-            }
+            award(armor, TierDomain.ARMOR, 1);
         }
-        final ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
-        if (TierService.getInstance().inferDomains(chest.getItem()).contains(TierDomain.ELYTRA)) {
-            UpgradeService.getInstance().addExperience(chest, 1);
-        }
-        // getArmorSlots() deliberately covers only the four armour slots, so a shield held to block
-        // would otherwise earn nothing at all. The off-hand is read separately for the domains that
-        // actually live there rather than looping every held item, so a weapon in the off-hand does
-        // not earn twice — once here and once from the weapon path.
+        // getArmorSlots() covers only the four armour slots, so an elytra — which occupies the chest
+        // slot without being armour — is read separately.
+        award(player.getItemBySlot(EquipmentSlot.CHEST), TierDomain.ELYTRA, 1);
+        // The off-hand is read separately for the domains that actually live there rather than
+        // looping every held item, so a weapon in the off-hand does not earn twice — once here and
+        // once from the weapon path.
         final ItemStack offhand = player.getOffhandItem();
-        final var offhandDomains = TierService.getInstance().inferDomains(offhand.getItem());
-        if (offhandDomains.contains(TierDomain.SHIELD) || offhandDomains.contains(TierDomain.RANGED_WEAPONS)) {
-            UpgradeService.getInstance().addExperience(offhand, 1);
-        }
+        award(offhand, TierDomain.SHIELD, 1);
+        award(offhand, TierDomain.RANGED_WEAPONS, 1);
     }
 
     @SubscribeEvent
@@ -94,6 +89,20 @@ public final class ItemExperienceHandler {
         for (final ItemStack armor : event.player.getArmorSlots()) {
             tryUpgrade(armor, event.player);
         }
+    }
+
+    /**
+     * Feeds one ladder, if the item belongs to it. Membership is checked here so the call sites stay
+     * a plain statement of which action feeds which ladder.
+     */
+    private static void award(final ItemStack stack, final TierDomain domain, final int amount) {
+        if (stack.isEmpty()) {
+            return;
+        }
+        if (!TierService.getInstance().inferDomains(stack.getItem()).contains(domain)) {
+            return;
+        }
+        UpgradeService.getInstance().addExperience(stack, domain, amount);
     }
 
     private static void tryUpgrade(final ItemStack stack, final LivingEntity holder) {

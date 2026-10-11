@@ -4,7 +4,9 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
@@ -37,15 +39,19 @@ public abstract class ItemStackNameMixin {
             return;
         }
         final CompoundTag te = root.getCompound("TieredEchoes");
-        if (!te.contains("tier_id")) {
+        if (!te.contains("domains")) {
             return;
         }
-        final ResourceLocation tierId = ResourceLocation.tryParse(te.getString("tier_id"));
+        final String tierId = tieredechoes$highestTierId(te.getCompound("domains"));
         if (tierId == null) {
             return;
         }
+        final ResourceLocation parsed = ResourceLocation.tryParse(tierId);
+        if (parsed == null) {
+            return;
+        }
 
-        final String tierName = capitalize(tierId.getPath());
+        final String tierName = capitalize(parsed.getPath());
         final String suffix = " [" + tierName + "]";
         final Component base = cir.getReturnValue();
         final String text = base.getString();
@@ -54,6 +60,52 @@ public abstract class ItemStackNameMixin {
         }
         final String cleaned = stripLegacyTierSuffix(self, text);
         cir.setReturnValue(Component.literal(cleaned).append(suffix).withStyle(base.getStyle()));
+    }
+
+    /**
+     * The tier id of the highest rung the item holds on any ladder.
+     *
+     * <p>NBT is read directly rather than going through {@code TierService}: this is the render path
+     * for every item tooltip, and the ladder's own {@code tier_sort_order} is already written into
+     * each domain compound, so no registry lookup is needed to know which rung is highest. Ties fall
+     * back to domain declaration order, matching the display rule used everywhere else.</p>
+     */
+    @Unique
+    private static String tieredechoes$highestTierId(final CompoundTag domains) {
+        String bestId = null;
+        int bestOrder = Integer.MIN_VALUE;
+        int bestDomainRank = Integer.MAX_VALUE;
+        for (final String key : domains.getAllKeys()) {
+            final CompoundTag entry = domains.getCompound(key);
+            final String id = entry.getString("tier_id");
+            if (id.isEmpty()) {
+                continue;
+            }
+            final int order = entry.getInt("tier_sort_order");
+            final int domainRank = tieredechoes$domainRank(key);
+            if (order > bestOrder || (order == bestOrder && domainRank < bestDomainRank)) {
+                bestId = id;
+                bestOrder = order;
+                bestDomainRank = domainRank;
+            }
+        }
+        return bestId;
+    }
+
+    /**
+     * A domain's declaration order, used only to break ties between equally-ranked rungs. An unknown
+     * domain sorts last rather than being skipped, so a ladder written by a newer build still
+     * displays instead of vanishing from the name.
+     */
+    @Unique
+    private static int tieredechoes$domainRank(final String key) {
+        final TierDomain[] values = TierDomain.values();
+        for (int i = 0; i < values.length; i++) {
+            if (values[i].getSerializedName().equalsIgnoreCase(key)) {
+                return i;
+            }
+        }
+        return values.length;
     }
 
     /**

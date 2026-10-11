@@ -32,19 +32,19 @@ public final class ProgressionGameTest {
     public static void anItemAtTheRequiredExperienceAdvancesExactlyOneTier(final GameTestHelper helper) {
         final TierDefinition uncommon = GameTestTiers.tier(helper, TierDomain.WEAPON, "uncommon");
         final ItemStack stack = GameTestTiers.tieredSword(helper, "common");
-        UpgradeService.getInstance().setStoredExperience(stack, uncommon.experienceRequired());
+        UpgradeService.getInstance().setStoredExperience(stack, TierDomain.WEAPON, uncommon.experienceRequired());
 
         final ItemStack upgraded = UpgradeService.getInstance().tryAutoUpgrade(stack, helper.getLevel().getServer())
                 .orElseThrow(() -> new GameTestAssertException(
                         "an item holding " + uncommon.experienceRequired() + " xp should have advanced"));
 
-        helper.assertTrue(UpgradeService.getInstance().getCurrentTier(upgraded)
+        helper.assertTrue(UpgradeService.getInstance().getCurrentTier(upgraded, TierDomain.WEAPON)
                         .filter(tier -> tier.id().equals(uncommon.id())).isPresent(),
                 "expected to land on " + uncommon.id());
         helper.assertTrue(upgraded.getItem() == Items.IRON_SWORD, "tier changes, material does not");
-        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(upgraded) == 0,
+        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(upgraded, TierDomain.WEAPON) == 0,
                 "an item that spent exactly the requirement should keep nothing");
-        helper.assertTrue(UpgradeService.getInstance().getCurrentTier(stack)
+        helper.assertTrue(UpgradeService.getInstance().getCurrentTier(stack, TierDomain.WEAPON)
                         .filter(tier -> tier.id().equals(GameTestTiers.tierId("common"))).isPresent(),
                 "the original stack must be left alone");
         helper.succeed();
@@ -61,14 +61,14 @@ public final class ProgressionGameTest {
 
         final boolean attuned = UpgradeService.getInstance().attuneStack(stack, new ItemStack(Items.IRON_INGOT));
         helper.assertTrue(attuned, "the shipped common -> uncommon addition is an iron ingot");
-        helper.assertTrue(UpgradeService.getInstance().getSelectedBranchId(stack).isPresent(),
+        helper.assertTrue(UpgradeService.getInstance().getSelectedBranchId(stack, TierDomain.WEAPON).isPresent(),
                 "attunement should have recorded which branch was chosen");
 
-        UpgradeService.getInstance().setStoredExperience(stack, uncommon.experienceRequired());
+        UpgradeService.getInstance().setStoredExperience(stack, TierDomain.WEAPON, uncommon.experienceRequired());
         final ItemStack upgraded = UpgradeService.getInstance().tryAutoUpgrade(stack, helper.getLevel().getServer())
                 .orElseThrow(() -> new GameTestAssertException("the attuned branch should still be upgradeable"));
 
-        helper.assertFalse(UpgradeService.getInstance().getSelectedBranchId(upgraded).isPresent(),
+        helper.assertFalse(UpgradeService.getInstance().getSelectedBranchId(upgraded, TierDomain.WEAPON).isPresent(),
                 "the branch selection must be spent by the upgrade it was made for");
         helper.succeed();
     }
@@ -77,12 +77,12 @@ public final class ProgressionGameTest {
     @GameTest
     public static void anItemAtTheTopOfTheLadderSimplyStops(final GameTestHelper helper) {
         final ItemStack stack = GameTestTiers.tieredSword(helper, "epic");
-        UpgradeService.getInstance().setStoredExperience(stack, 10_000);
+        UpgradeService.getInstance().setStoredExperience(stack, TierDomain.WEAPON, 10_000);
 
         final Optional<ItemStack> upgraded = UpgradeService.getInstance().tryAutoUpgrade(stack, helper.getLevel().getServer());
 
         helper.assertFalse(upgraded.isPresent(), "an epic item has nowhere further to go");
-        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(stack) == 10_000,
+        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(stack, TierDomain.WEAPON) == 10_000,
                 "unspendable experience should stay on the item rather than be discarded");
         helper.succeed();
     }

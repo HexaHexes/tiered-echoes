@@ -1,10 +1,7 @@
 package org.bitwisemadness.tieredechoes.common.mixin;
 
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
-import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
-import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -69,31 +66,9 @@ public abstract class ItemStackDurabilityMixin {
 
     @Unique
     private static Optional<Double> tieredechoes$durabilityMultiplier(final ItemStack stack) {
-        final CompoundTag root = stack.getTag();
-        if (root == null || !root.contains("TieredEchoes")) {
-            return Optional.empty();
-        }
-        final CompoundTag te = root.getCompound("TieredEchoes");
-        if (!te.contains("tier_id")) {
-            return Optional.empty();
-        }
-        final TierService service = TierService.getInstance();
-        return service.getTier(net.minecraft.resources.ResourceLocation.tryParse(te.getString("tier_id")),
-                        tieredechoes$domain(te))
-                .map(tier -> service.getScalarMultiplier(tier, "durability"))
-                .orElse(Optional.empty());
-    }
-
-    @Unique
-    private static TierDomain tieredechoes$domain(final CompoundTag te) {
-        if (!te.contains("tier_domain")) {
-            return null;
-        }
-        try {
-            return TierDomain.valueOf(te.getString("tier_domain").toUpperCase(java.util.Locale.ROOT));
-        } catch (IllegalArgumentException ignored) {
-            // A domain a datapack removed: treat as untiered rather than throwing out of a read.
-            return null;
-        }
+        // All ladders are consulted and the strongest multiplier wins, because an axe climbs both
+        // the weapon and the tool ladder and either may state a durability multiplier. Picking one
+        // arbitrarily would make the result depend on iteration order rather than on the data.
+        return TierService.getInstance().getScalarMultiplier(stack, "durability");
     }
 }

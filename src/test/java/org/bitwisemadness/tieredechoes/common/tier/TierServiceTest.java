@@ -113,10 +113,58 @@ class TierServiceTest {
                 TestTiers.tier("common", TierDomain.ARMOR, 0, 0)));
         final ItemStack stack = new ItemStack(Items.LEATHER_CHESTPLATE);
         final CompoundTag te = stack.getOrCreateTagElement("TieredEchoes");
-        te.putString("tier_id", TestTiers.id("common").toString());
-        te.putString("tier_domain", "armor");
+        final CompoundTag domains = new CompoundTag();
+        final CompoundTag armor = new CompoundTag();
+        armor.putString("tier_id", TestTiers.id("common").toString());
+        domains.put("armor", armor);
+        te.put("domains", domains);
 
-        assertEquals(TierDomain.ARMOR, this.service.readTierFromNbt(stack, null).orElseThrow().domain());
+        assertEquals(TierDomain.ARMOR, this.service.readTierFromNbt(stack, TierDomain.ARMOR).orElseThrow().domain());
+    }
+
+    /**
+     * An axe belongs to two tags and so holds a rung on two ladders. Each is stored under its own
+     * key so that neither overwrites the other, and both must come back independently.
+     */
+    @Test
+    void twoLaddersOnOneItemAreStoredAndReadBackIndependently() {
+        this.service.replaceAll(List.of(
+                TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
+                TestTiers.tier("common", TierDomain.TOOL, 0, 0)));
+        final ItemStack stack = new ItemStack(Items.IRON_AXE);
+        final CompoundTag te = stack.getOrCreateTagElement("TieredEchoes");
+        final CompoundTag domains = new CompoundTag();
+        final CompoundTag weapon = new CompoundTag();
+        weapon.putString("tier_id", TestTiers.id("common").toString());
+        final CompoundTag tool = new CompoundTag();
+        tool.putString("tier_id", TestTiers.id("common").toString());
+        domains.put("weapon", weapon);
+        domains.put("tool", tool);
+        te.put("domains", domains);
+
+        assertEquals(2, this.service.readAllTiersFromNbt(stack).size(),
+                "an item in two tags must carry a rung for each ladder");
+        assertEquals(TierDomain.WEAPON, this.service.readTierFromNbt(stack, TierDomain.WEAPON).orElseThrow().domain());
+        assertEquals(TierDomain.TOOL, this.service.readTierFromNbt(stack, TierDomain.TOOL).orElseThrow().domain());
+    }
+
+    /** A ladder whose domain the datapack has since removed must not discard the item's other rungs. */
+    @Test
+    void aLadderForARemovedDomainIsSkippedRatherThanDiscardingTheItem() {
+        this.service.replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0, 0)));
+        final ItemStack stack = new ItemStack(Items.IRON_AXE);
+        final CompoundTag te = stack.getOrCreateTagElement("TieredEchoes");
+        final CompoundTag domains = new CompoundTag();
+        final CompoundTag weapon = new CompoundTag();
+        weapon.putString("tier_id", TestTiers.id("common").toString());
+        final CompoundTag unknown = new CompoundTag();
+        unknown.putString("tier_id", TestTiers.id("common").toString());
+        domains.put("weapon", weapon);
+        domains.put("not_a_real_domain", unknown);
+        te.put("domains", domains);
+
+        assertEquals(1, this.service.readAllTiersFromNbt(stack).size(),
+                "the unrecognised ladder should be skipped, not take the recognised one with it");
     }
 
     @Test
