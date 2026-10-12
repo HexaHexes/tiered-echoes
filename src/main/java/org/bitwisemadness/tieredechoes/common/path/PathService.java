@@ -184,12 +184,18 @@ public final class PathService implements IPathService {
         return Optional.empty();
     }
 
+    /**
+     * The edges out of a rung, always in registration order and never filtered by branch.
+     *
+     * <p>Branch selection is disabled pending a rework, so a {@code selected_branch_id} — whether
+     * left on an item by an older build or written by hand — no longer narrows the choice. The
+     * parameter is still accepted because every caller has one and removing it would be churn for no
+     * behaviour change; it is simply not consulted. A linear ladder yields its single edge, and a
+     * datapack that declares a genuine branch falls back to its configured resolution policy rather
+     * than to a selection that nothing can make any more.</p>
+     */
     public synchronized List<TierEdge> resolveNextEdges(final ResourceLocation sourceTierId, final TierDomain domain, final Optional<String> selectedBranchId) {
-        final List<TierEdge> edges = this.outgoingEdges.getOrDefault(new TierKey(domain, sourceTierId), List.of());
-        if (selectedBranchId.isPresent()) {
-            return edges.stream().filter(edge -> this.effectiveBranchId(edge).equals(selectedBranchId.get())).toList();
-        }
-        return List.copyOf(edges);
+        return List.copyOf(this.outgoingEdges.getOrDefault(new TierKey(domain, sourceTierId), List.of()));
     }
 
     public synchronized String effectiveBranchId(final TierEdge edge) {

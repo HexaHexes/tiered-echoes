@@ -7,7 +7,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraftforge.fml.ModList;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.RegistryObject;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
@@ -21,19 +20,17 @@ public final class TECreativeTabs {
     public static final DeferredRegister<CreativeModeTab> TABS =
             DeferredRegister.create(Registries.CREATIVE_MODE_TAB, TieredEchoes.MOD_ID);
     public static final Map<TierDomain, RegistryObject<CreativeModeTab>> DOMAIN_TABS = new LinkedHashMap<>();
-    public static final Map<String, RegistryObject<CreativeModeTab>> CURIOS_TABS = new LinkedHashMap<>();
     public static final RegistryObject<CreativeModeTab> TEMPLATES_TAB = registerTemplatesTab();
 
+    /**
+     * One tab per domain that ships a ladder, keyed off {@link TierDomain#builtinDomains()} rather
+     * than spelled out. A domain that ships no ladder gets no tab, because an empty tab reads as a
+     * broken feature rather than as an invitation to write a datapack.
+     */
     static {
         registerDomainTab(TierDomain.TOOL, Items.DIAMOND_PICKAXE);
         registerDomainTab(TierDomain.WEAPON, Items.DIAMOND_SWORD);
         registerDomainTab(TierDomain.ARMOR, Items.DIAMOND_CHESTPLATE);
-        registerDomainTab(TierDomain.SHIELD, Items.SHIELD);
-        registerDomainTab(TierDomain.RANGED_WEAPONS, Items.BOW);
-        registerDomainTab(TierDomain.ELYTRA, Items.ELYTRA);
-        if (ModList.get().isLoaded("curios")) {
-            registerDomainTab(TierDomain.ACCESSORY, Items.TOTEM_OF_UNDYING);
-        }
     }
 
     private TECreativeTabs() {
@@ -44,11 +41,11 @@ public final class TECreativeTabs {
             final CreativeModeTab.Builder builder = CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.tieredechoes.templates"))
                     .icon(() -> new ItemStack(TEItems.UPGRADE_TEMPLATES.get("common").get()))
-                    .displayItems((parameters, output) -> {
-                        TEItems.UPGRADE_TEMPLATES.values().forEach(template -> output.accept(template.get()));
-                        TEItems.DOWNGRADE_TEMPLATES.values().forEach(template -> output.accept(template.get()));
-                    });
-            templatePreviousTabKey().ifPresent(builder::withTabsAfter);
+                    .displayItems((parameters, output) ->
+                            TEItems.UPGRADE_TEMPLATES.values().forEach(template -> output.accept(template.get())));
+            // Always last. The accessory tab this used to follow no longer exists, and the curios
+            // check that chose it would otherwise have to know about a tab nothing registers.
+            builder.withTabsAfter(tabKey(TierDomain.ARMOR));
             return builder.build();
         });
     }
@@ -67,7 +64,7 @@ public final class TECreativeTabs {
     /**
      * The tab this one should follow. Derived from declaration order rather than a hand-written
      * switch, because the switch silently dropped every domain nobody remembered to add — which is
-     * how {@code shield}, {@code ranged_weapons} and {@code elytra} would have shipped unlinked.
+     * how a domain could ship unlinked from the tabs before it.
      */
     private static java.util.Optional<ResourceKey<CreativeModeTab>> previousTabKey(final TierDomain domain) {
         final java.util.List<TierDomain> order = TierDomain.builtinDomains();
@@ -76,17 +73,6 @@ public final class TECreativeTabs {
             return java.util.Optional.empty();
         }
         return java.util.Optional.of(tabKey(order.get(index - 1)));
-    }
-
-    private static java.util.Optional<ResourceKey<CreativeModeTab>> templatePreviousTabKey() {
-        if (ModList.get().isLoaded("curios")) {
-            return java.util.Optional.of(tabKey(TierDomain.ACCESSORY));
-        }
-        return java.util.Optional.of(tabKey(TierDomain.ARMOR));
-    }
-
-    private static ResourceKey<CreativeModeTab> templatesTabKey() {
-        return ResourceKey.create(Registries.CREATIVE_MODE_TAB, new ResourceLocation(TieredEchoes.MOD_ID, "templates"));
     }
 
     private static ResourceKey<CreativeModeTab> tabKey(final TierDomain domain) {

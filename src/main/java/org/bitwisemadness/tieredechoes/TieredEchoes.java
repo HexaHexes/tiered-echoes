@@ -15,6 +15,7 @@ import org.bitwisemadness.tieredechoes.common.compat.legendarysurvivaloverhaul.L
 import org.bitwisemadness.tieredechoes.common.config.TieredEchoesConfig;
 import org.bitwisemadness.tieredechoes.common.gamerule.TEGameRules;
 import org.bitwisemadness.tieredechoes.common.network.TENetwork;
+import org.bitwisemadness.tieredechoes.common.rarity.TERarities;
 import org.bitwisemadness.tieredechoes.common.registry.TECreativeTabs;
 import org.bitwisemadness.tieredechoes.common.registry.TEItems;
 import org.bitwisemadness.tieredechoes.common.registry.TERecipes;
@@ -28,6 +29,12 @@ public final class TieredEchoes {
 
     public TieredEchoes() {
         final IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
+
+        // Before anything that reads rarities. The template items declare a rarity when they are
+        // built, and DeferredRegister loads that class as soon as it is referenced below — so the
+        // LEGENDARY constant has to exist by then or the legendary template comes out coloured as
+        // its fallback.
+        TERarities.register();
 
         TEItems.ITEMS.register(modBus);
         TERecipes.SERIALIZERS.register(modBus);

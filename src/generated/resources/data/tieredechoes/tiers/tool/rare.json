@@ -13,24 +13,17 @@
     "thermal_resistance": 1.25
   },
   "compat_amplifiers": {},
-  "curios_set_bonuses": {
-    "*2": 1.1,
-    "*3": 1.15,
-    "*4": 1.2
-  },
+  "curios_set_bonuses": {},
   "display_rarity": "RARE",
   "domain": "tool",
-  "downgrade_ingredient": {
-    "item": "minecraft:iron_ingot"
-  },
-  "experience_required": 75,
-  "generated_downgrade_template": true,
+  "experience_required": 675,
+  "generated_downgrade_template": false,
   "generated_upgrade_template": true,
   "id": "tieredechoes:rare",
   "previous_tier": "tieredechoes:uncommon",
   "schema_version": 1,
   "sort_order": 2,
   "upgrade_ingredient": {
-    "item": "minecraft:diamond"
+    "item": "minecraft:gold_ingot"
   }
 }

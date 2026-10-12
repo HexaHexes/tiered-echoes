@@ -1,0 +1,29 @@
+{
+  "attribute_multipliers": {
+    "armor": 1.6,
+    "armor_toughness": 1.55,
+    "attack_damage": 1.6,
+    "attack_speed": 1.17,
+    "cold_resistance": 1.6,
+    "durability": 1.55,
+    "heat_resistance": 1.6,
+    "knockback_resistance": 1.4,
+    "mana_regen": 1.4,
+    "max_mana": 1.6,
+    "thermal_resistance": 1.6
+  },
+  "compat_amplifiers": {},
+  "curios_set_bonuses": {},
+  "display_rarity": "LEGENDARY",
+  "domain": "weapon",
+  "experience_required": 3125,
+  "generated_downgrade_template": false,
+  "generated_upgrade_template": true,
+  "id": "tieredechoes:legendary",
+  "previous_tier": "tieredechoes:epic",
+  "schema_version": 1,
+  "sort_order": 4,
+  "upgrade_ingredient": {
+    "item": "minecraft:netherite_ingot"
+  }
+}

@@ -18,6 +18,7 @@ import org.bitwisemadness.tieredechoes.common.compat.arsnouveau.ArsNouveauCompat
 import org.bitwisemadness.tieredechoes.common.compat.ironsspells.IronsSpellsCompatBridge;
 import org.bitwisemadness.tieredechoes.common.compat.legendarysurvivaloverhaul.LegendarySurvivalOverhaulCompatBridge;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
+import org.bitwisemadness.tieredechoes.common.rarity.TERarities;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReporter;
 import org.bitwisemadness.tieredechoes.common.network.TENetwork;
@@ -349,7 +350,10 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
         final ResourceLocation id = new ResourceLocation(GsonHelper.getAsString(json, "id"));
         final TierDomain domain = TierDomain.valueOf(GsonHelper.getAsString(json, "domain").toUpperCase(java.util.Locale.ROOT));
         final int schemaVersion = GsonHelper.getAsInt(json, "schema_version", 1);
-        final Rarity rarity = Rarity.valueOf(GsonHelper.getAsString(json, "display_rarity", "COMMON").toUpperCase(java.util.Locale.ROOT));
+        // Resolved through TERarities so that an unrecognised name reads as COMMON rather than
+        // aborting the whole reload, and so that LEGENDARY resolves whether or not the runtime
+        // extension that creates it succeeded.
+        final Rarity rarity = TERarities.byName(GsonHelper.getAsString(json, "display_rarity", "COMMON"), Rarity.COMMON);
         final int sortOrder = GsonHelper.getAsInt(json, "sort_order", 0);
         final int xp = GsonHelper.getAsInt(json, "experience_required", 0);
         final IngredientMatcher ingredient = parseIngredient(GsonHelper.getAsJsonObject(json, "upgrade_ingredient"));

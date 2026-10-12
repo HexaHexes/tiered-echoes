@@ -121,22 +121,34 @@ class UpgradeServiceTest {
 
     /**
      * Experience can arrive before any tier is written — a freshly crafted sword earns weapon
-     * experience from its first kill and still sits at the ladder's initial rung. Those ladders have
-     * state but no {@code tier_id}, so they have to be found by looking at which ladders have been
-     * touched at all rather than at which ones name a rung.
+     * experience from its first kill and has nothing recorded at all. Those ladders have state but
+     * no {@code tier_id}, so they have to be found by looking at which ladders have been touched at
+     * all rather than at which ones name a rung.
+     *
+     * <p>Getting onto the ladder is a step of its own now, because the path graph says nothing about
+     * it: there is no edge out of a tier the item does not have. So the chain opens with the
+     * bootstrap transition and then continues one rung per attempt, exactly as every later step
+     * does — {@code tryAutoUpgrade} advances an item one position, and reaching the requirement
+     * from untiered costs a call rather than a corner case.</p>
      */
     @Test
     void anItemWithExperienceButNoWrittenTierStillClimbsFromTheInitialRung() {
-        // The initial rung is resolved through the domain tag, so the sword has to be bound the way
+        // The first rung is resolved through the domain tag, so the sword has to be bound the way
         // a datapack would bind it.
         TestTags.bindVanillaWeaponDefaults();
         final ItemStack stack = new ItemStack(Items.IRON_SWORD);
-        this.service.addExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP);
+        this.service.addExperience(stack, TierDomain.WEAPON,
+                this.tier("alpha").experienceRequired() + BETA_REQUIRED_XP);
 
-        final ItemStack upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
+        final ItemStack joined = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
+
+        assertEquals(TestTiers.id("alpha"), this.service.getCurrentTier(joined, TierDomain.WEAPON).orElseThrow().id(),
+                "experience earned before any tier was written must put the item on the ladder");
+
+        final ItemStack upgraded = this.service.tryAutoUpgrade(joined, ProgressionRules.defaults()).orElseThrow();
 
         assertEquals(TestTiers.id("beta"), this.service.getCurrentTier(upgraded, TierDomain.WEAPON).orElseThrow().id(),
-                "experience earned before any tier was written must still drive progression");
+                "and the same experience must go on driving it upward after that");
     }
 
     @Test
@@ -266,16 +278,27 @@ class UpgradeServiceTest {
 
     // ---------------------------------------------------------------- downgrade
 
+    /**
+     * Downgrades are disabled pending a rework of how the way down should be expressed.
+     *
+     * <p>This replaces an assertion that a downgrade stepped back a rung and kept the experience.
+     * The behaviour is still there in {@code TierDowngradeRecipe} and its serializer — what is gone
+     * is the service path and the generated recipe, so this pins the gate itself: an attempt must be
+     * a no-op rather than a crash, and must not so much as touch the stored pool. Anything else
+     * would mean the disable is only partial and a re-enable is silently already done.</p>
+     */
     @Test
-    void downgradingStepsBackOneTierAndKeepsExperience() {
+    void downgradingIsDisabledAndLeavesTheItemExactlyAsItWas() {
         final ItemStack stack = atTier("alpha");
         this.service.setStoredExperience(stack, TierDomain.WEAPON, 42);
         final ItemStack atBeta = this.service.applyTier(stack, tier("beta"));
 
         final ItemStack downgraded = this.service.downgrade(atBeta, TierDomain.WEAPON);
 
-        assertEquals(TestTiers.id("alpha"), this.service.getCurrentTier(downgraded).orElseThrow().id());
-        assertEquals(42, this.service.getStoredExperience(downgraded, TierDomain.WEAPON), "a downgrade is not a punishment");
+        assertEquals(TestTiers.id("beta"), this.service.getCurrentTier(downgraded).orElseThrow().id(),
+                "a disabled downgrade must not move the item");
+        assertEquals(42, this.service.getStoredExperience(downgraded, TierDomain.WEAPON));
+        assertNotSame(atBeta, downgraded, "the caller is handed a copy, never the stack it passed in");
     }
 
     @Test
@@ -298,14 +321,23 @@ class UpgradeServiceTest {
 
     // ---------------------------------------------------------------- branches and attunement
 
+    /**
+     * Attunement is disabled pending a rework of branching.
+     *
+     * <p>Replaces an assertion that a matching off-hand selected its branch. Leaving attunement live
+     * would mean an item silently recording a {@code selected_branch_id} that no edge can match any
+     * more, which reads as a bug rather than as a feature being off — so the seam has to stay shut
+     * and has to be pinned shut.</p>
+     */
     @Test
-    void attuningSelectsTheBranchWhoseIngredientMatchesTheOffhand() {
+    void attuningIsDisabledAndSelectsNothing() {
         final ItemStack main = atTier("alpha");
 
-        final boolean attuned = this.service.attuneStack(main, new ItemStack(Items.IRON_INGOT));
+        assertFalse(this.service.attuneStack(main, new ItemStack(Items.IRON_INGOT)));
+        assertTrue(this.service.getSelectedBranchId(main, TierDomain.WEAPON).isEmpty());
 
-        assertTrue(attuned);
-        assertEquals(Optional.of("branch_alpha_beta"), this.service.getSelectedBranchId(main, TierDomain.WEAPON));
+        assertFalse(this.service.attuneStack(main, new ItemStack(Items.IRON_INGOT), TierDomain.WEAPON),
+                "the scoped overload must agree with the unscoped one");
     }
 
     @Test
@@ -351,17 +383,27 @@ class UpgradeServiceTest {
                         .getCompound("domains").getCompound("weapon").getString("last_branch_id")));
     }
 
-    /** A selection left over from a removed or differently-ordered path must not select anything. */
+    /**
+     * A selection left over from a removed path is ignored rather than fatal.
+     *
+     * <p>This used to assert the opposite: that an unresolvable selection blocked the upgrade so
+     * the player could see what was wrong. Branch selection is disabled pending a rework, and
+     * nothing writes one any more — but an item upgraded by an older build still carries one, and
+     * treating it as a lock would mean such an item could never be upgraded again with no way to
+     * clear the field. The upgrade proceeds and clears the stale value on the way through.</p>
+     */
     @Test
-    void aStaleBranchSelectionBlocksTheUpgradeInsteadOfPickingArbitrarily() {
+    void aStaleBranchSelectionDoesNotBlockTheUpgrade() {
         final ItemStack stack = atTier("alpha");
         stack.getOrCreateTagElement("TieredEchoes")
                 .getCompound("domains").getCompound("weapon").putString("selected_branch_id", "branch_beta_gamma");
         this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP);
 
-        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()));
-        assertEquals(Optional.of("branch_beta_gamma"), this.service.getSelectedBranchId(stack, TierDomain.WEAPON),
-                "an unresolvable selection is left alone so the player can see what is wrong");
+        final Optional<ItemStack> upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults());
+
+        assertEquals(TestTiers.id("beta"), this.service.getCurrentTier(upgraded.orElseThrow()).orElseThrow().id());
+        assertEquals(Optional.empty(), this.service.getSelectedBranchId(upgraded.orElseThrow(), TierDomain.WEAPON),
+                "the stale selection is discarded rather than carried onto the new rung");
     }
 
     @Test

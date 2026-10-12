@@ -13,24 +13,17 @@
     "thermal_resistance": 1.4
   },
   "compat_amplifiers": {},
-  "curios_set_bonuses": {
-    "*2": 1.12,
-    "*3": 1.18,
-    "*4": 1.24
-  },
+  "curios_set_bonuses": {},
   "display_rarity": "EPIC",
   "domain": "armor",
-  "downgrade_ingredient": {
-    "item": "minecraft:diamond"
-  },
-  "experience_required": 150,
-  "generated_downgrade_template": true,
+  "experience_required": 1600,
+  "generated_downgrade_template": false,
   "generated_upgrade_template": true,
   "id": "tieredechoes:epic",
   "previous_tier": "tieredechoes:rare",
   "schema_version": 1,
   "sort_order": 3,
   "upgrade_ingredient": {
-    "item": "minecraft:netherite_ingot"
+    "item": "minecraft:diamond"
   }
 }

@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TierDomainTest {
@@ -49,14 +50,30 @@ class TierDomainTest {
     /**
      * The built-in ladders are generated per domain in these lists, so a domain declared here
      * without matching tier and edge data turns into {@code missing_source_tier} errors on boot.
+     *
+     * <p>Three rather than seven because the other four scale nothing but durability, or are not
+     * designed yet. They keep their constants and their tag mappings — {@code
+     * everyDomainStillResolvesAnItemTag} pins that — so a datapack can still declare a ladder for
+     * them. The mod just does not ship the JSON.</p>
      */
     @Test
     void builtinDomainsAreExactlyTheOnesThatShipLadders() {
-        assertEquals(List.of(TierDomain.WEAPON, TierDomain.TOOL, TierDomain.ARMOR, TierDomain.SHIELD,
-                        TierDomain.RANGED_WEAPONS, TierDomain.ELYTRA, TierDomain.ACCESSORY),
+        assertEquals(List.of(TierDomain.WEAPON, TierDomain.TOOL, TierDomain.ARMOR),
                 TierDomain.builtinDomains());
-        assertTrue(TierDomain.builtinDomains().contains(TierDomain.ELYTRA),
-                "the elytra ships a durability-only ladder, so it belongs in the builtin list");
+        assertFalse(TierDomain.builtinDomains().contains(TierDomain.ELYTRA),
+                "the elytra scales durability alone, so it ships no ladder until a pack asks for one");
+    }
+
+    /**
+     * The reason the enum keeps all seven: a datapack that wants a shield ladder needs a tag to put
+     * the items in, and a domain whose tag never resolves is a domain nothing can ever join.
+     */
+    @Test
+    void everyDomainStillResolvesAnItemTag() {
+        for (final TierDomain domain : TierDomain.values()) {
+            assertTrue(TieredEchoesTagKeys.forDomain(domain).isPresent(),
+                    domain + " lost its item tag, so no datapack can declare a ladder for it");
+        }
     }
 
     /**

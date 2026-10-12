@@ -15,8 +15,11 @@ import org.bitwisemadness.tieredechoes.common.upgrade.UpgradeService;
  * <p>Because the transition is applied on top of a copy of the base stack rather than onto a
  * pre-built result item, everything else the item carries — enchantments, durability, custom name,
  * the {@code TieredEchoes} tag itself — survives a material upgrade unchanged.</p>
+ *
+ * <p>Not {@code final}: {@link TierBootstrapRecipe} extends it to inherit assembly and ingredient
+ * handling, overriding only the test that decides when the recipe applies.</p>
  */
-public final class TierUpgradeRecipe extends TierTransitionRecipe {
+public class TierUpgradeRecipe extends TierTransitionRecipe {
 
     public TierUpgradeRecipe(final ResourceLocation recipeId,
                              final Ingredient template,

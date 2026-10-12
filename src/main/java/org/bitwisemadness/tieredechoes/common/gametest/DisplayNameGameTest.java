@@ -5,14 +5,17 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.Rarity;
 import net.minecraftforge.gametest.GameTestHolder;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.upgrade.UpgradeService;
 
 /**
- * The {@code [Tier]} suffix is appended by a mixin on {@code ItemStack#getHoverName}, and a mixin
- * never runs in a plain JVM — this is the only place the behaviour can actually be observed.
+ * How a tiered item renders: the {@code [Tier]} suffix is appended by a mixin on
+ * {@code ItemStack#getHoverName}, and the name's colour comes from a second mixin on
+ * {@code ItemStack#getRarity}. Mixins never run in a plain JVM, so this is the only place either
+ * behaviour can actually be observed.
  */
 @GameTestHolder(TieredEchoes.MOD_ID)
 public final class DisplayNameGameTest {
@@ -26,6 +29,29 @@ public final class DisplayNameGameTest {
 
         helper.assertTrue(stack.getHoverName().getString().endsWith(" [Uncommon]"),
                 "expected a tier suffix but got \"" + stack.getHoverName().getString() + "\"");
+        helper.succeed();
+    }
+
+    /**
+     * The suffix and the colour have to name the same rung. A mod-registered item is {@code COMMON}
+     * unless something rewrites that, so without the rarity mixin an epic sword would render its
+     * name in plain white however high it had climbed.
+     */
+    @GameTest
+    public static void aTieredItemCarriesTheRarityItsTierDeclares(final GameTestHelper helper) {
+        final ItemStack stack = GameTestTiers.tieredSword(helper, "uncommon");
+
+        helper.assertTrue(stack.getRarity() == Rarity.UNCOMMON,
+                "expected the uncommon tier's rarity but got " + stack.getRarity());
+        helper.succeed();
+    }
+
+    @GameTest
+    public static void anUntieredItemsRarityIsLeftAlone(final GameTestHelper helper) {
+        final ItemStack stack = new ItemStack(Items.IRON_SWORD);
+
+        helper.assertTrue(stack.getRarity() == Rarity.COMMON,
+                "an item with no TieredEchoes tag must keep the rarity its item declares");
         helper.succeed();
     }
 

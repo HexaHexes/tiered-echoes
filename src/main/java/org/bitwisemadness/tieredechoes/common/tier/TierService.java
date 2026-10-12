@@ -37,6 +37,8 @@ public final class TierService implements ITierService {
     public static final String ROOT_TAG = "TieredEchoes";
     public static final String DOMAINS_TAG = "domains";
     public static final String TIER_ID_TAG = "tier_id";
+    public static final String DISPLAY_RARITY_TAG = "display_rarity";
+    public static final String SORT_ORDER_TAG = "tier_sort_order";
 
     private final Map<TierDomain, List<TierDefinition>> tiersByDomain = new EnumMap<>(TierDomain.class);
     private final Map<TierKey, TierDefinition> tiersByKey = new LinkedHashMap<>();
@@ -119,12 +121,22 @@ public final class TierService implements ITierService {
         return Optional.ofNullable(found);
     }
 
+    /**
+     * Deliberately absent rather than defaulted.
+     *
+     * <p>Every item in a domain tag used to read as that domain's first rung, because
+     * {@code resolveCurrentTier} fell back to {@code tiers.get(0)} when nothing was recorded. That
+     * made "untiered" unobservable: an item whose tier another mod had stripped still claimed to be
+     * common, and the smithing table could not tell a fresh item from an upgraded one.</p>
+     *
+     * <p>An item is now untiered until something says otherwise. Untiered gear scales nothing, shows
+     * no bracket and costs copper — or the first rung's experience — to join the ladder, which is
+     * what puts the bootstrap transition in {@code TierBootstrapRecipe} and the climb in
+     * {@code UpgradeService#tryAutoUpgradeDomain} in reach of a real failure rather than a
+     * theoretical one.</p>
+     */
     public synchronized Optional<TierDefinition> getInitialTierForItem(final Item item, final TierDomain preferredDomain) {
-        if (preferredDomain == null || !this.inferDomains(item).contains(preferredDomain)) {
-            return Optional.empty();
-        }
-        final List<TierDefinition> tiers = this.tiersByDomain.getOrDefault(preferredDomain, List.of());
-        return tiers.isEmpty() ? Optional.empty() : Optional.of(tiers.get(0));
+        return Optional.empty();
     }
 
     public synchronized Optional<TierDefinition> getPreviousTier(final TierDefinition tier) {
@@ -369,20 +381,12 @@ public final class TierService implements ITierService {
      */
     public synchronized Optional<TierDefinition> resolveCurrentTier(final ItemStack stack, final TierDomain preferredDomain) {
         if (preferredDomain != null) {
-            final Optional<TierDefinition> stored = this.readTierFromNbt(stack, preferredDomain);
-            if (stored.isPresent()) {
-                return stored;
-            }
-            return this.getInitialTierForItem(stack.getItem(), preferredDomain);
+            return this.readTierFromNbt(stack, preferredDomain);
         }
         final Map<TierDomain, TierDefinition> stored = this.readAllTiersFromNbt(stack);
-        if (!stored.isEmpty()) {
-            return stored.values().stream().max(this.displayTierComparator());
-        }
-        // Nothing stored: an untiered item shows the initial rung of its first ladder, which is what
-        // it would sit on the moment it is tiered for the first time.
-        final TierDomain domain = this.inferDomains(stack.getItem()).stream().findFirst().orElse(null);
-        return domain == null ? Optional.empty() : this.getInitialTierForItem(stack.getItem(), domain);
+        return stored.isEmpty()
+                ? Optional.empty()
+                : stored.values().stream().max(this.displayTierComparator());
     }
 
     /**

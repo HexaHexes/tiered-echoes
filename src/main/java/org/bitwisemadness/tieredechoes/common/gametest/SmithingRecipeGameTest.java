@@ -16,7 +16,7 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraftforge.gametest.GameTestHolder;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
-import org.bitwisemadness.tieredechoes.common.recipe.TierDowngradeRecipe;
+import org.bitwisemadness.tieredechoes.common.recipe.TierBootstrapRecipe;
 import org.bitwisemadness.tieredechoes.common.recipe.TierTransitionRecipe;
 import org.bitwisemadness.tieredechoes.common.recipe.TierUpgradeRecipe;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
@@ -38,6 +38,8 @@ public final class SmithingRecipeGameTest {
 
     private static final ResourceLocation UPGRADE =
             new ResourceLocation(TieredEchoes.MOD_ID, "tier_upgrade/weapon/common_to_uncommon");
+    private static final ResourceLocation BOOTSTRAP =
+            new ResourceLocation(TieredEchoes.MOD_ID, "tier_upgrade/weapon/untiered_to_common");
     private static final ResourceLocation DOWNGRADE =
             new ResourceLocation(TieredEchoes.MOD_ID, "tier_downgrade/weapon/uncommon_to_common");
 
@@ -45,11 +47,19 @@ public final class SmithingRecipeGameTest {
     }
 
     @GameTest
-    public static void bothGeneratedTransitionsAreRegisteredUnderTheirStableIds(final GameTestHelper helper) {
+    public static void theUpgradeAndBootstrapRecipesAreRegisteredUnderTheirStableIds(final GameTestHelper helper) {
         helper.assertTrue(recipe(helper, UPGRADE) instanceof TierUpgradeRecipe,
                 UPGRADE + " should be a tier upgrade recipe");
-        helper.assertTrue(recipe(helper, DOWNGRADE) instanceof TierDowngradeRecipe,
-                DOWNGRADE + " should be a tier downgrade recipe");
+        helper.assertTrue(recipe(helper, BOOTSTRAP) instanceof TierBootstrapRecipe,
+                BOOTSTRAP + " should be a tier bootstrap recipe");
+        helper.succeed();
+    }
+
+    /** Downgrades are disabled, so nothing may be generated for them — but their data path stays. */
+    @GameTest
+    public static void noDowngradeRecipeIsGenerated(final GameTestHelper helper) {
+        helper.assertFalse(helper.getLevel().getRecipeManager().byKey(DOWNGRADE).isPresent(),
+                DOWNGRADE + " was generated, but downgrades are disabled pending a rework");
         helper.succeed();
     }
 
@@ -120,27 +130,48 @@ public final class SmithingRecipeGameTest {
         helper.succeed();
     }
 
+    /**
+     * The step onto the ladder. An untiered sword has no rung recorded, so the ordinary upgrade
+     * recipe's source-tier test can never be satisfied for it — the bootstrap recipe's inverted test
+     * is what puts the common template and copper to work. It must then hand over to that ordinary
+     * recipe rather than stay applicable forever.
+     */
     @GameTest
-    public static void aDowngradeStepsBackWithoutPunishingProgress(final GameTestHelper helper) {
-        final TierTransitionRecipe downgrade = recipe(helper, DOWNGRADE);
-        final ItemStack base = GameTestTiers.tieredSword(helper, "uncommon");
+    public static void anUntieredSwordJoinsTheLadderThroughSmithing(final GameTestHelper helper) {
+        final TierTransitionRecipe bootstrap = recipe(helper, BOOTSTRAP);
+        final ItemStack base = new ItemStack(Items.IRON_SWORD);
         UpgradeService.getInstance().setStoredExperience(base, TierDomain.WEAPON, 55);
         base.enchant(Enchantments.SHARPNESS, 3);
-        helper.assertTrue(downgrade.isBaseIngredient(base), "an iron sword should satisfy the weapon base tag");
+        helper.assertTrue(bootstrap.isBaseIngredient(base), "an iron sword should satisfy the weapon base tag");
 
-        final Container slots = new SimpleContainer(slotItem(helper, downgrade.templateIngredient(), "template"),
-                base, slotItem(helper, downgrade.additionIngredient(), "addition"));
-        helper.assertTrue(downgrade.matches(slots, helper.getLevel()),
-                "an uncommon weapon with the uncommon downgrade template should match");
+        final Container slots = new SimpleContainer(slotItem(helper, bootstrap.templateIngredient(), "template"),
+                base, slotItem(helper, bootstrap.additionIngredient(), "addition"));
+        helper.assertTrue(bootstrap.matches(slots, helper.getLevel()),
+                "an untiered weapon with the common template and the ladder's opening ingredient should match");
 
-        final ItemStack result = downgrade.assemble(slots, helper.getLevel().registryAccess());
+        final ItemStack result = bootstrap.assemble(slots, helper.getLevel().registryAccess());
 
         helper.assertTrue(currentTierId(result).filter(GameTestTiers.tierId("common")::equals).isPresent(),
-                "expected the item to step back to common but it is on " + currentTierId(result));
+                "expected the item to land on common but it is on " + currentTierId(result));
         helper.assertTrue(UpgradeService.getInstance().getStoredExperience(result, TierDomain.WEAPON) == 55,
-                "a downgrade is a route back down, not a punishment");
+                "stored experience must survive joining the ladder");
         helper.assertTrue(EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, result) == 3,
-                "enchantments must survive a downgrade too");
+                "enchantments must survive joining the ladder");
+
+        // The same bootstrap slots with the now-tiered item in them: only the recorded rung stands
+        // between this and a second, free trip up the ladder.
+        final Container repeatedSlots = new SimpleContainer(slotItem(helper, bootstrap.templateIngredient(), "template"),
+                result, slotItem(helper, bootstrap.additionIngredient(), "addition"));
+        helper.assertFalse(bootstrap.matches(repeatedSlots, helper.getLevel()),
+                "an item that already has a rung must not be able to join the ladder a second time");
+
+        // Both slots belong to the recipe being asked, not to the one before it: the bootstrap spends
+        // the common template and copper, the ordinary upgrade spends uncommon's.
+        final TierTransitionRecipe upgrade = recipe(helper, UPGRADE);
+        final Container upgradeSlots = new SimpleContainer(slotItem(helper, upgrade.templateIngredient(), "template"),
+                result, slotItem(helper, upgrade.additionIngredient(), "addition"));
+        helper.assertTrue(upgrade.matches(upgradeSlots, helper.getLevel()),
+                "the ordinary upgrade recipe must take over from where the bootstrap recipe stops");
         helper.succeed();
     }
 

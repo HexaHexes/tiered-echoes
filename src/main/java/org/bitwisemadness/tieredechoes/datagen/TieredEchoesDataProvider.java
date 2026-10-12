@@ -104,7 +104,7 @@ public final class TieredEchoesDataProvider implements DataProvider {
         json.addProperty("schema_version", tier.schemaVersion());
         json.addProperty("id", tier.id().toString());
         json.addProperty("domain", tier.domain().getSerializedName());
-        json.addProperty("display_rarity", tier.displayRarity().name());
+        json.addProperty("display_rarity", ShippedLadder.rarityNameFor(tier.id()));
         json.addProperty("sort_order", tier.sortOrder());
         json.addProperty("experience_required", tier.experienceRequired());
         json.addProperty("generated_upgrade_template", tier.generatedUpgradeTemplate());

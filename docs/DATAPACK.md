@@ -32,14 +32,13 @@ datapacks produce a warning naming the loser.
   "domain": "weapon",
   "display_rarity": "RARE",
   "sort_order": 2,
-  "experience_required": 75,
+  "experience_required": 675,
   "generated_upgrade_template": true,
-  "generated_downgrade_template": true,
-  "upgrade_ingredient": { "item": "minecraft:diamond" },
-  "downgrade_ingredient": { "item": "minecraft:iron_ingot" },
+  "generated_downgrade_template": false,
+  "upgrade_ingredient": { "item": "minecraft:gold_ingot" },
   "previous_tier": "tieredechoes:uncommon",
-  "attribute_multipliers": { "attack_damage": 1.25 },
-  "curios_set_bonuses": { "*2": 1.05 },
+  "attribute_multipliers": { "attack_damage": 1.25, "durability": 1.2 },
+  "curios_set_bonuses": {},
   "compat_amplifiers": {}
 }
 ```
@@ -49,18 +48,39 @@ datapacks produce a warning naming the loser.
 | `id` | yes | Namespaced tier id. Scoped by domain — see below. |
 | `domain` | yes | `weapon`, `tool`, `armor`, `shield`, `ranged_weapons`, `elytra` or `accessory`. |
 | `schema_version` | no | Defaults to `1`. |
-| `display_rarity` | no | Vanilla `Rarity` name. Defaults to `COMMON`. |
+| `display_rarity` | no | Vanilla `Rarity` name, plus `LEGENDARY`, which the mod adds above `EPIC`. Defaults to `COMMON`. An unrecognised name reads as `COMMON` rather than failing the reload. |
 | `sort_order` | no | Ladder position within the domain. Defaults to `0`. |
 | `experience_required` | no | Experience needed to reach this tier from the previous one. Defaults to `0`. |
 | `upgrade_ingredient` | no | Fallback smithing addition when the path edge declares none. |
-| `downgrade_ingredient` | no | Addition used by the downgrade route out of this tier. |
+| `downgrade_ingredient` | no | Addition used by the downgrade route out of this tier. Parsed, but no downgrade route is generated while downgrades are disabled. |
 | `previous_tier` | no | Informational back-link; the path graph is what actually drives transitions. |
 | `attribute_multipliers` | no | Attribute name → multiplier. Any attribute name is accepted. Also carries `durability`, which is not an attribute but scales the item's maximum durability the same way. |
-| `curios_set_bonuses` | no | Curios set size → multiplier, e.g. `*2` for wearing two pieces. |
+| `curios_set_bonuses` | no | Curios set size → multiplier, e.g. `*2` for wearing two pieces. No accessory ladder ships, so this is empty in the built-in files. |
 | `compat_amplifiers` | no | `*<n>`-style key → multiplier for a compat-mod attribute. |
-| `generated_upgrade_template` / `generated_downgrade_template` | no | Whether the conventional `<tier>_*_template` items exist. Both default to `true`. |
+| `generated_upgrade_template` / `generated_downgrade_template` | no | Whether the conventional `<tier>_*_template` items exist. Both default to `true`. The shipped data sets `generated_downgrade_template` to `false`, because no downgrade item is registered. |
 | `upgrade_template_item_model` / `downgrade_template_item_model` | no | Override the template item's model. |
 | `upgrade_template_texture` / `downgrade_template_texture` | no | Override the template item's texture. |
+
+### The `LEGENDARY` rarity
+
+`LEGENDARY` is not a vanilla rarity, so the mod appends it to the enum as a golden orange
+(`#FFAA00`) above `EPIC` — unless it is already there. Forge lets any mod extend that enum, and
+appending a second constant under the same name would leave two rarity answers to one name while
+`Rarity.valueOf` resolves only the first, making ours unreachable. So the mod probes first and
+adopts whichever `LEGENDARY` arrived first, logging when it does.
+
+Two consequences follow for a pack that names it:
+
+- **The colour is not necessarily golden orange.** If another mod got there first, legendary items
+  take that rarity's colour, because that is what a player sees in the name above them.
+- **The legendary upgrade template follows it too.** Its texture is generated at load time by
+  rotating the vanilla netherite template's hue onto the rarity's own hue, so the plate agrees with
+  the name rather than fixing a colour of its own. A rarity declaring no colour — or only a grey
+  one — has no hue to follow, and the template falls back to golden orange.
+
+Rarities appended *after* this mod still collide; there is no registry to arbitrate that. It is
+worth checking whether a modpack's other addons already define `LEGENDARY` before assuming the
+golden orange shown here.
 
 **Tier ids are not globally unique.** `tieredechoes:rare` exists once per domain. Every lookup is
 scoped by `domain`, so an armor piece can never follow a weapon branch.
@@ -68,8 +88,14 @@ scoped by `domain`, so an armor piece can never follow a weapon branch.
 Which items belong to a domain is decided entirely by that domain's item tag — see
 [Making modded gear tierable](#making-modded-gear-tierable). There is no item-class heuristic: an
 item belongs to a domain because a tag says so, and an item in two tags belongs to two domains and
-climbs a ladder for each. Every built-in domain ships a ladder, including `shield`, `ranged_weapons`
-and `elytra`.
+climbs a ladder for each.
+
+Three domains ship a ladder: `weapon`, `tool` and `armor`. The other four — `shield`,
+`ranged_weapons`, `elytra` and `accessory` — are still complete members of the enum with their tag
+paths and their parsing intact, so a datapack can declare a ladder for any of them. What is absent
+is the generated JSON. Those items scale durability and nothing else in vanilla, so a shipped ladder
+for them would be a durability table wearing a different name; a pack that means to give a modded bow
+real attributes is better served writing the ladder it actually wants.
 
 ## `tier_paths/<file>.json`
 
@@ -83,8 +109,7 @@ and `elytra`.
       "from": "tieredechoes:uncommon",
       "to": "tieredechoes:rare",
       "display_branch_id": "weapon_uncommon_to_rare",
-      "attunement_ingredient": { "item": "minecraft:diamond" },
-      "downgrade_to": "tieredechoes:uncommon"
+      "attunement_ingredient": { "item": "minecraft:gold_ingot" }
     }
   ]
 }
@@ -97,22 +122,24 @@ file is rejected with a `path_domain_unresolvable` error otherwise.
 | Field | Meaning |
 | --- | --- |
 | `from` / `to` | The tiers this edge connects. |
-| `display_branch_id` | Identifier shown to the player when choosing between branches. |
-| `attunement_ingredient` | Shift-right-click selection item, and the smithing addition. The older alias `addition` is also accepted. |
-| `downgrade_to` | Where a downgrade from `to` lands. Defaults to `from`. |
+| `display_branch_id` | Identifier shown in diagnostics when a branch is in play. |
+| `attunement_ingredient` | The smithing addition. The older alias `addition` is also accepted. |
+| `downgrade_to` | Where a downgrade from `to` lands. Defaults to `from`. Parsed and resolved, but no downgrade recipe is generated from it. |
 
-Multiple edges sharing a `from` are **branching**: each becomes its own smithing recipe, and an item
-that reaches a fork picks one when its experience fills, either at random or deterministically (see
-`tier_policies` below).
+Multiple edges sharing a `from` are **branching**: each becomes its own smithing recipe, and an
+item reaching a fork picks one under the `multi_path_resolution` rule.
 
-An edge with no `downgrade_to` and no downgrade route still leaves the player a way back down, so
-removing a datapack can never strand an item above a ladder that no longer exists.
+Two parts of branching are currently switched off in code, pending a rework. Shift-right-click
+attunement no longer records a selection, so an existing `selected_branch_id` on an item is ignored
+rather than honoured; and `downgrade_to` no longer produces a recipe. Both fields keep parsing, and
+keep resolving during validation, so no pack is rejected for using them — a re-enable is a matter of
+turning the behaviour back on rather than of reading a data path that was removed.
 
 ## `tier_templates/<template>.json`
 
-A tier has one upgrade template and one downgrade template, regardless of which item type carries
-it — the template items were never domain-specific. Files are therefore flat, not grouped by
-domain, and are keyed by tier plus direction.
+A tier's templates are keyed by tier plus direction rather than by domain — the template items were
+never domain-specific — so a sword and a pickaxe of the same tier spend the same template. Files are
+therefore flat, not grouped by domain.
 
 ```json
 {
@@ -134,7 +161,11 @@ domain, and are keyed by tier plus direction.
 | `upgrade_template_texture` / `downgrade_template_texture` | no | Texture override. |
 
 Declaring `item` lets a datapack add tiers without registering Java items. Without a declaration
-the built-in `<tier>_upgrade_template` / `<tier>_downgrade_template` items are used when they exist.
+the built-in `<tier>_upgrade_template` item is used when it exists.
+
+Only upgrade templates are registered, because downgrades are disabled pending a rework — a
+`kind: "downgrade"` declaration still loads and still resolves to whatever `item` it names, but the
+mod ships no downgrade item for a pack to fall back on.
 
 Data files written against the old per-domain layout still load: a leftover `"domain"` key is
 simply not read.
@@ -156,11 +187,11 @@ Files merge onto the defaults, so a two-line datapack can flip one rule.
 
 | Field | Values | Effect |
 | --- | --- | --- |
-| `mode` | `HYBRID`, `AUTO_ONLY`, `SMITHING_ONLY` | `AUTO_ONLY` stops publishing upgrade recipes; `SMITHING_ONLY` disables experience-driven upgrading. Downgrades stay available in both. |
-| `multi_path_resolution` | `RANDOM`, `FIRST` | How a branch is chosen at a fork when none is attuned. |
+| `mode` | `HYBRID`, `AUTO_ONLY`, `SMITHING_ONLY` | `AUTO_ONLY` stops publishing upgrade recipes; `SMITHING_ONLY` disables experience-driven upgrading. |
+| `multi_path_resolution` | `RANDOM`, `FIRST` | How a branch is chosen at a fork. With attunement disabled this is the only selector, so a pack that declares a fork gets this rule and nothing else. |
 | `carry_over_excess_xp` | boolean | **Superseded by the `teResetExperienceOnUpgrade` gamerule, which wins.** Still parsed so existing packs load, but it no longer reaches gameplay. Whether experience beyond the requirement survives an upgrade is a decision about a world, not about the ladder a pack ships to everyone. |
 | `disable_upgrade_recipes` | boolean | Kill-switch layered on top of `mode`. |
-| `consume_attunement_item` | boolean or omitted | `null`/omitted defers to the `item_xp.consume_attunement_item` config option. |
+| `consume_attunement_item` | boolean or omitted | `null`/omitted defers to the `item_xp.consume_attunement_item` config option. Currently unreachable, since attunement does nothing; still parsed so packs that set it load. |
 
 ## Making modded gear tierable
 
@@ -169,14 +200,10 @@ Add the items to the base tag for their domain rather than writing a recipe:
 - `#tieredechoes:weapons`
 - `#tieredechoes:tools`
 - `#tieredechoes:armor`
-- `#tieredechoes:shields`
-- `#tieredechoes:ranged_weapons`
-- `#tieredechoes:elytra`
-- `#tieredechoes:accessories`
 
-These tags ship with the mod and are extended by the generated smithing recipes, so an item added
-to one becomes tierable with no other changes. They are the whole of the membership rule: an item
-belongs to a domain because its tag contains it, never because of what class it happens to be.
+These three tags ship with the mod and are extended by the generated smithing recipes, so an item
+added to one becomes tierable with no other changes. They are the whole of the membership rule: an
+item belongs to a domain because its tag contains it, never because of what class it happens to be.
 
 An item in two tags belongs to two domains and climbs both ladders independently. `#minecraft:axes`
 is in both `weapons` and `tools` for exactly this reason.
@@ -186,39 +213,30 @@ is in both `weapons` and `tools` for exactly this reason.
 | `weapons` | `#minecraft:swords`, `#minecraft:axes`, `#forge:tools/tridents` |
 | `tools` | `#minecraft:pickaxes`, `#minecraft:shovels`, `#minecraft:hoes`, `#minecraft:axes` |
 | `armor` | `#forge:armors` |
-| `shields` | `#forge:tools/shields` |
-| `ranged_weapons` | `#forge:tools/bows`, `#forge:tools/crossbows` |
-| `accessories` | `#curios:back`, `:belt`, `:body`, `:bracelet`, `:charm`, `:curio`, `:hands`, `:head`, `:necklace`, `:ring` |
-| `elytra` | `#forge:elytra` |
 
-### Adding your own elytra
+### Declaring a ladder for a domain that does not ship one
 
-Neither vanilla nor Forge ships an elytra item tag — in 1.20.1 the elytra is in no tag at all — so
-this mod seeds one:
+`shields`, `ranged_weapons`, `elytra` and `accessories` all still resolve as tag paths, but the mod
+ships no tag file for them, so they start empty. To put an item on one of those ladders:
 
-```json
-// data/forge/tags/items/elytra.json
-{
-  "replace": false,
-  "values": [ "minecraft:elytra" ]
-}
-```
+1. Write `data/tieredechoes/tags/items/<domain>.json` listing the items.
+2. Write `data/<ns>/tiers/<domain>/<tier>.json` for each rung you want, with the attributes that
+   domain should scale.
+3. Write `data/<ns>/tier_paths/<domain>.json` describing the steps between them.
 
-Because that file lives in the shared `forge` namespace and uses `"replace": false`, any mod or
-datapack can add further elytras by shipping its own `data/forge/tags/items/elytra.json` with more
-values. Nothing in this mod needs to change. If you have a modded elytra, contribute it there rather
-than patching `#tieredechoes:elytra` directly, so every pack picks it up.
+No Java change is needed, and nothing in the mod treats those domains as second-class — the only
+difference is that the mod does not author their files for them.
 
 ### A note on spears and hammers
 
 Spear- and hammer-type weapons have no item class in 1.20.1 and no vanilla tag, so there is nothing
-for these ladders to hold yet. When a future Minecraft version adds them, they follow the same path
-everything else does: add the new vanilla tag to `#tieredechoes:weapons` and they are on the ladder.
-No Java change will be needed — that is the point of the tag being the rule.
+for `#tieredechoes:weapons` to hold yet. When a future Minecraft version adds them, they follow the
+same path everything else does: add the new vanilla tag to `#tieredechoes:weapons` and they are on
+the ladder. No Java change will be needed — that is the point of the tag being the rule.
 
 ## Recipes
 
-Recipes of type `tieredechoes:tier_upgrade` and `tieredechoes:tier_downgrade` are generated from the
+Recipes of type `tieredechoes:tier_upgrade` and `tieredechoes:tier_bootstrap` are generated from the
 path graph on every reload and injected into the recipe manager, so they appear in the vanilla
 smithing table without any further wiring. Their JSON shape matches `minecraft:smithing_transform`
 plus `domain`, `source_tier` and `target_tier`:
@@ -226,9 +244,9 @@ plus `domain`, `source_tier` and `target_tier`:
 ```json
 {
   "type": "tieredechoes:tier_upgrade",
-  "template": { "item": "tieredechoes:rare_upgrade_template" },
+  "template": { "item": "tieredechoes:uncommon_upgrade_template" },
   "base": { "tag": "tieredechoes:weapons" },
-  "addition": { "item": "minecraft:diamond" },
+  "addition": { "item": "minecraft:gold_ingot" },
   "domain": "weapon",
   "source_tier": "tieredechoes:uncommon",
   "target_tier": "tieredechoes:rare"
@@ -239,14 +257,20 @@ Generated ids name the transition the recipe performs:
 
 ```
 tieredechoes:tier_upgrade/<domain>/<from>_to_<to>
-tieredechoes:tier_downgrade/<domain>/<from>_to_<to>
+tieredechoes:tier_upgrade/<domain>/untiered_to_<to>
 ```
 
-so the recipe that steps an uncommon weapon back down to common is
-`tieredechoes:tier_downgrade/weapon/uncommon_to_common`.
+The second form is the **bootstrap recipe**: the step onto the ladder, one per domain, taken from
+the domain's first rung. Its `source_tier` is `tieredechoes:untiered`, which names no tier — the
+value exists so the recipe can cross the network, and its real test is inverted, matching only while
+the base has no rung recorded at all. That is what stops an untiered sword from re-running it once it
+has a tier, and what stops a common one from running it in the first place.
+
+`tieredechoes:tier_downgrade` is not generated while downgrades are disabled, but the type is still
+registered, so a hand-written recipe of that type loads and is usable exactly as before.
 
 Only hand-write these if you want a transition the path graph does not describe; ids under
-`tier_upgrade/` and `tier_downgrade/` are owned by the generator and are replaced on each reload.
+`tier_upgrade/` are owned by the generator and are replaced on each reload.
 
 ## Validation
 
