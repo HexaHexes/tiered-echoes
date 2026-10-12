@@ -1,23 +1,5 @@
 {
-  "type": "minecraft:crafting_shaped",
-  "key": {
-    "#": {
-      "item": "minecraft:diamond"
-    },
-    "C": {
-      "item": "minecraft:copper_ingot"
-    },
-    "S": {
-      "item": "tieredechoes:common_upgrade_template"
-    }
-  },
-  "pattern": [
-    "#S#",
-    "#C#",
-    "###"
-  ],
-  "result": {
-    "count": 2,
-    "item": "tieredechoes:common_upgrade_template"
-  }
+  "id": "tieredechoes:common_upgrade_template",
+  "item": "tieredechoes:common_upgrade_template",
+  "schema_version": 1
 }

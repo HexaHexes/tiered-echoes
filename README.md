@@ -1,40 +1,33 @@
 # Tiered Echoes
 
-A Forge mod for Minecraft 1.20.1 where gear gains experience as you use it and climbs a tier
-ladder in return. Weapons, tools and armor each have their own ladder, running Common, Uncommon,
-Rare, Epic, Legendary.
+A Forge mod for Minecraft 1.20.1 where gear climbs a tier ladder at a smithing table. Weapons,
+tools and armor each have their own ladder, running Common, Uncommon, Rare, Epic, Legendary.
 
 ## Progression
 
-Experience comes from use. Weapons earn it from the damage they deal, tools from the blocks
-they break, armor from the hits it takes.
+Tiers are gained by smithing, and by nothing else. An untiered item joins its ladder at a smithing
+table with a template and the first rung's ingredient; each rung after that is another trip with
+the next template and the next metal. A datapack decides which routes exist and what each one
+costs.
 
-Hovering a tiered item shows how far it is from its next tier, as `Experience: 45 / 200`.
+Both the way up and the way down are switches a datapack declares and an operator can override per
+world. The way down ships off.
 
-An item upgrades once it holds enough experience for the next tier. It can also be upgraded by
-hand at a smithing table, using a template and the tier's ingredient. A datapack decides which
-of those routes is available; the default allows both. An untiered item joins the ladder through
-the same table, spending the Common template and a copper ingot.
-
-Both routes keep what the item already carries: experience, enchantments, durability, and its
-custom name. Material upgrades keep their tier too, so a diamond sword becoming netherite
-stays Uncommon rather than reverting.
+A smithing upgrade keeps what the item already carries: enchantments, durability, and its custom
+name. Material upgrades keep their tier too, so a diamond sword becoming netherite stays Uncommon
+rather than reverting.
 
 ## Tiers
 
 Each tier multiplies the item's stats. The built-in weapon ladder runs:
 
-| Tier | Experience | Attack damage | Durability | Upgrade ingredient |
-| --- | --- | --- | --- | --- |
-| Common | 25 | 1.0x | 1.0x | Copper ingot |
-| Uncommon | 200 | 1.12x | 1.1x | Iron ingot |
-| Rare | 675 | 1.25x | 1.2x | Gold ingot |
-| Epic | 1600 | 1.4x | 1.35x | Diamond |
-| Legendary | 3125 | 1.6x | 1.55x | Netherite ingot |
-
-The experience column is what each step costs, so the whole ladder takes 5625 experience to
-climb from nothing. The curve is cubic rather than geometric: the opening is cheap and the
-weight sits on the later rungs, which is where a player has already committed to an item.
+| Tier | Attack damage | Durability | Upgrade ingredient |
+| --- | --- | --- | --- |
+| Common | 1.0x | 1.0x | Copper ingot |
+| Uncommon | 1.12x | 1.1x | Iron ingot |
+| Rare | 1.25x | 1.2x | Gold ingot |
+| Epic | 1.4x | 1.35x | Diamond |
+| Legendary | 1.6x | 1.55x | Netherite ingot |
 
 Armor and tools use the same five rungs with multipliers of their own.
 
@@ -45,18 +38,33 @@ A legendary-tier item carries the `LEGENDARY` rarity, a golden orange above Epic
 
 ## Gamerules
 
-Three gamerules control how progression behaves in a world. Each one starts from the matching
-value in `config/tieredechoes-common.toml`, so the config file is what a new world is created
-with. After that the gamerule is what you change, per world, with `/gamerule`.
+Five gamerules govern what a world does. Each one is an integer rather than a boolean, because the
+useful state is the middle one:
 
-| Gamerule | Default | Effect |
-| --- | --- | --- |
-| `teItemExperience` | `true` | Whether items earn experience at all. Off leaves smithing progression intact. |
-| `teAutoUpgrade` | `true` | Whether experience alone advances an item's tier. Off makes the smithing table the only route. |
-| `teResetExperienceOnUpgrade` | `false` | Whether an upgrade spends the item's experience, rather than carrying the excess into the new tier. |
+| Value | Meaning |
+| --- | --- |
+| `0` | Follow `tier_policies` in the datapack. Every rule starts here. |
+| `1` | Force the switch off, whatever the pack asked for. |
+| `2` | Force the switch on, whatever the pack asked for. |
 
-Editing the config file does not change worlds that already exist, which is the point. Pacing is
-a decision about a world rather than about an installation.
+| Gamerule | Overrides |
+| --- | --- |
+| `teTiers` | Whether items carry a tier at all. |
+| `teTierUpgrades` | Whether the smithing upgrade route is published. |
+| `teLevels` | Whether items carry a level. |
+| `teLevelUp` | Whether an item may gain a level. |
+| `teDowngrades` | Whether the smithing downgrade route is published. |
+
+There is no config default for any of these: a switch the datapack already answered does not need a
+second source of truth, and a rule scoped to one world is reversible where an installation's config
+file is not.
+
+A system switch hides rather than deletes. `/gamerule teTiers 1` makes every tiered item present as
+untiered, but the tag on the item stays put, and setting the rule back to `0` restores every bracket
+and multiplier that was showing before.
+
+A progression switch closes a route rather than rewinding progress. `/gamerule teTierUpgrades 1`
+stops new upgrades being offered; an item already sitting on `legendary` stays there.
 
 ## Included
 
@@ -74,13 +82,13 @@ Tiered items show their tier in the name, as `Iron Sword [Uncommon]`.
 
 | Command | Effect |
 | --- | --- |
-| `/tieredechoes inspect hand` | Show the tier, experience and selected branch of the item held. |
+| `/tieredechoes inspect hand` | Show the item held and the tier it holds on each ladder. |
 | `/tieredechoes validate` | Re-check the loaded tiers, paths and templates. |
 | `/tieredechoes preview <domain> <tier>` | Preview a tier's stats. |
 
 ## Pack makers
 
-Tiers, paths, templates and progression rules are all data. The mod ships a complete working set
+Tiers, paths, templates and progression switches are all data. The mod ships a complete working set
 you can copy and edit; see [docs/DATAPACK.md](https://github.com/HexaHexes/tiered-echoes/blob/main/docs/DATAPACK.md).
 
 Modded items become tierable by adding them to the base tag for their domain:
@@ -88,8 +96,8 @@ Modded items become tierable by adding them to the base tag for their domain:
 the rule — an item in two tags climbs two ladders. The shield, ranged, elytra and accessory tags
 resolve too, so declaring a ladder for one of them is purely a data change.
 
-Pacing starts in `config/tieredechoes-common.toml`, which supplies the value each gamerule is
-created with. Contributor documentation, including the build and release process, lives in
+Pacing starts in `tier_policies`, which a world can override one switch at a time with the
+`te*` gamerules. Contributor documentation, including the build and release process, lives in
 [docs/DEVELOPMENT.md](https://github.com/HexaHexes/tiered-echoes/blob/main/docs/DEVELOPMENT.md).
 
 ## Requirements

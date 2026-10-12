@@ -68,10 +68,9 @@ public final class SmithingRecipeGameTest {
      * carries exactly where it was.
      */
     @GameTest
-    public static void aSmithingUpgradeCarriesOverExperienceAndEnchantments(final GameTestHelper helper) {
+    public static void aSmithingUpgradeCarriesOverEnchantmentsAndDurability(final GameTestHelper helper) {
         final TierTransitionRecipe upgrade = recipe(helper, UPGRADE);
         final ItemStack base = GameTestTiers.tieredSword(helper, "common");
-        UpgradeService.getInstance().setStoredExperience(base, TierDomain.WEAPON, 55);
         base.enchant(Enchantments.SHARPNESS, 3);
         base.setDamageValue(11);
         helper.assertTrue(upgrade.isBaseIngredient(base),
@@ -87,13 +86,10 @@ public final class SmithingRecipeGameTest {
         helper.assertTrue(result.getItem() == Items.IRON_SWORD, "the material must not change");
         helper.assertTrue(currentTierId(result).filter(GameTestTiers.tierId("uncommon")::equals).isPresent(),
                 "expected the item to land on uncommon but it is on " + currentTierId(result));
-        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(result, TierDomain.WEAPON) == 55,
-                "stored experience must survive a material upgrade");
         helper.assertTrue(EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, result) == 3,
                 "enchantments must survive a material upgrade");
         helper.assertTrue(result.getDamageValue() == 11, "durability must survive a material upgrade");
-        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(base, TierDomain.WEAPON) == 55
-                        && currentTierId(base).filter(GameTestTiers.tierId("common")::equals).isPresent(),
+        helper.assertTrue(currentTierId(base).filter(GameTestTiers.tierId("common")::equals).isPresent(),
                 "the stack sitting in the slot must be left untouched");
         helper.succeed();
     }
@@ -140,7 +136,6 @@ public final class SmithingRecipeGameTest {
     public static void anUntieredSwordJoinsTheLadderThroughSmithing(final GameTestHelper helper) {
         final TierTransitionRecipe bootstrap = recipe(helper, BOOTSTRAP);
         final ItemStack base = new ItemStack(Items.IRON_SWORD);
-        UpgradeService.getInstance().setStoredExperience(base, TierDomain.WEAPON, 55);
         base.enchant(Enchantments.SHARPNESS, 3);
         helper.assertTrue(bootstrap.isBaseIngredient(base), "an iron sword should satisfy the weapon base tag");
 
@@ -153,8 +148,6 @@ public final class SmithingRecipeGameTest {
 
         helper.assertTrue(currentTierId(result).filter(GameTestTiers.tierId("common")::equals).isPresent(),
                 "expected the item to land on common but it is on " + currentTierId(result));
-        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(result, TierDomain.WEAPON) == 55,
-                "stored experience must survive joining the ladder");
         helper.assertTrue(EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, result) == 3,
                 "enchantments must survive joining the ladder");
 

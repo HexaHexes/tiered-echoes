@@ -46,28 +46,6 @@ public final class ShippedLadder {
     private static final List<String> RARITIES = List.of("COMMON", "UNCOMMON", "RARE", "EPIC", TERarities.LEGENDARY);
 
     /**
-     * Experience required to <em>reach</em> each rung.
-     *
-     * <p>Cubic rather than geometric, because the shape matters more than the total. A doubling
-     * curve spends most of its budget on the last step and makes every earlier step feel like
-     * preamble; a cubic one keeps the opening cheap and puts the weight where a player has already
-     * committed to the item. Derived rather than written out so that extending the ladder extends
-     * the curve instead of pairing a new tier with a stale number.</p>
-     *
-     * <p>The rung index is one-based because tierless is not a rung: an item with nothing recorded
-     * is untiered, not sitting on a bottom tier, so there is no index zero to pay for.</p>
-     */
-    private static final List<Integer> EXPERIENCE = experienceCurve();
-
-    private static List<Integer> experienceCurve() {
-        final List<Integer> curve = new ArrayList<>();
-        for (int rung = 1; rung <= TIER_NAMES.size(); rung++) {
-            curve.add(25 * rung * rung * rung);
-        }
-        return List.copyOf(curve);
-    }
-
-    /**
      * The material each step up costs, one per rung.
      *
      * <p>Copper opens the ladder and netherite closes it. The escalation is the familiar vanilla
@@ -223,7 +201,6 @@ public final class ShippedLadder {
                 1,
                 rarity(index),
                 index,
-                EXPERIENCE.get(index),
                 item(UPGRADE_INGREDIENTS.get(index)),
                 Optional.empty(),
                 index == 0 ? Optional.empty() : Optional.of(new ResourceLocation(TieredEchoes.MOD_ID, TIER_NAMES.get(index - 1))),
@@ -251,8 +228,6 @@ public final class ShippedLadder {
                 // No downgrade target, for the same reason the tier declares no downgrade material.
                 Optional.empty(),
                 Optional.of(TieredEchoes.MOD_ID),
-                Optional.empty(),
-                Optional.empty(),
                 Optional.of(domain.getSerializedName() + "_" + from.getPath() + "_to_" + to.getPath()),
                 Map.of());
     }

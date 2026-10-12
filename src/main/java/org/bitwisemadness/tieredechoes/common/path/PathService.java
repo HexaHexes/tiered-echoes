@@ -1,12 +1,9 @@
 package org.bitwisemadness.tieredechoes.common.path;
 
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
 import org.bitwisemadness.tieredechoes.api.common.IPathService;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
-import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierKey;
@@ -25,8 +22,10 @@ import java.util.Set;
 /**
  * Graph of tier transitions, keyed by {@link TierKey} so that every domain keeps its own edges.
  *
- * <p>Tier ids are shared across domains, so an unscoped {@code (domain, tierId)} key is what stops an
- * armour piece from following a weapon branch and what makes attunement ingredients unambiguous.</p>
+ * <p>Tier ids are shared across domains, so an unscoped {@code (domain, tierId)} key is what stops
+ * an armour piece from following a weapon branch. Which route an item takes is decided entirely by
+ * the smithing recipe the player picks — the graph has no opinion of its own about a fork, and
+ * holds nothing that would let it choose one.</p>
  */
 public final class PathService implements IPathService {
     private static final PathService INSTANCE = new PathService();
@@ -76,7 +75,6 @@ public final class PathService implements IPathService {
                         Map.of("from", edge.from().toString(), "to", edge.to().toString(), "domain", edge.domain().getSerializedName())));
             }
         }
-        reportAttunementAmbiguity(report);
         reportDuplicateBranchIds(report);
         reportUnreachableTiers(tierService, report);
         return report;
@@ -110,35 +108,6 @@ public final class PathService implements IPathService {
         }
     }
 
-    private void reportAttunementAmbiguity(final ValidationReport report) {
-        for (final Map.Entry<TierKey, List<TierEdge>> entry : this.outgoingEdges.entrySet()) {
-            final Map<String, TierEdge> firstByIngredient = new LinkedHashMap<>();
-            for (final TierEdge edge : entry.getValue()) {
-                if (edge.attunementIngredient().isEmpty()) {
-                    continue;
-                }
-                final String key = edge.attunementIngredient().get().displayKey();
-                if (firstByIngredient.containsKey(key)) {
-                    final TierEdge first = firstByIngredient.get(key);
-                    report.add(new ValidationIssue(
-                            ValidationIssue.Severity.ERROR,
-                            "ambiguous_attunement_ingredient",
-                            "Ambiguous attunement ingredient for source tier; first registered branch will win.",
-                            Map.of(
-                                    "source_tier", entry.getKey().id().toString(),
-                                    "domain", entry.getKey().domain().getSerializedName(),
-                                    "ingredient", key,
-                                    "selected_edge", first.from() + "->" + first.to(),
-                                    "shadowed_edge", edge.from() + "->" + edge.to()
-                            )
-                    ));
-                } else {
-                    firstByIngredient.put(key, edge);
-                }
-            }
-        }
-    }
-
     private void reportDuplicateBranchIds(final ValidationReport report) {
         final Map<String, TierEdge> seen = new LinkedHashMap<>();
         for (final TierEdge edge : this.getAllEdgesLike()) {
@@ -148,7 +117,7 @@ public final class PathService implements IPathService {
                 report.add(new ValidationIssue(
                         ValidationIssue.Severity.ERROR,
                         "duplicate_branch_id",
-                        "Two edges share a display branch id; branch selection would be ambiguous.",
+                        "Two edges share a display branch id; the two routes would render identically.",
                         Map.of(
                                 "branch_id", branchId,
                                 "domain", edge.domain().getSerializedName(),
@@ -175,53 +144,11 @@ public final class PathService implements IPathService {
         return incoming.stream().filter(edge -> edge.downgradeTo().isPresent()).min(Comparator.comparingInt(TierEdge::registrationOrder));
     }
 
-    public synchronized Optional<TierEdge> resolveAttunementEdge(final ResourceLocation sourceTierId, final TierDomain domain, final ItemStack offhand) {
-        for (final TierEdge edge : this.outgoingEdges.getOrDefault(new TierKey(domain, sourceTierId), List.of())) {
-            if (edge.attunementIngredient().isPresent() && edge.attunementIngredient().get().matches(offhand)) {
-                return Optional.of(edge);
-            }
-        }
-        return Optional.empty();
-    }
-
-    /**
-     * The edges out of a rung, always in registration order and never filtered by branch.
-     *
-     * <p>Branch selection is disabled pending a rework, so a {@code selected_branch_id} — whether
-     * left on an item by an older build or written by hand — no longer narrows the choice. The
-     * parameter is still accepted because every caller has one and removing it would be churn for no
-     * behaviour change; it is simply not consulted. A linear ladder yields its single edge, and a
-     * datapack that declares a genuine branch falls back to its configured resolution policy rather
-     * than to a selection that nothing can make any more.</p>
-     */
-    public synchronized List<TierEdge> resolveNextEdges(final ResourceLocation sourceTierId, final TierDomain domain, final Optional<String> selectedBranchId) {
-        return List.copyOf(this.outgoingEdges.getOrDefault(new TierKey(domain, sourceTierId), List.of()));
-    }
-
     public synchronized String effectiveBranchId(final TierEdge edge) {
         return edge.displayBranchId().orElseGet(() -> edge.from() + "->" + edge.to());
     }
 
     public synchronized List<TierEdge> getAllEdgesLike() {
         return this.outgoingEdges.values().stream().flatMap(List::stream).toList();
-    }
-
-    public synchronized Optional<TierEdge> chooseRandomEligibleEdge(final ItemStack stack, final ResourceLocation sourceTierId, final List<TierEdge> candidates) {
-        if (candidates.isEmpty()) {
-            return Optional.empty();
-        }
-        final int seed = this.stableRandomSeed(stack, sourceTierId);
-        final int idx = Math.floorMod(seed, candidates.size());
-        return Optional.of(candidates.get(idx));
-    }
-
-    private int stableRandomSeed(final ItemStack stack, final ResourceLocation sourceTierId) {
-        int seed = sourceTierId.hashCode();
-        final CompoundTag tag = stack.getTag();
-        if (tag != null) {
-            seed = 31 * seed + tag.toString().hashCode();
-        }
-        seed = 31 * seed + stack.getItem().toString().hashCode();
-        return seed;
     }
 }

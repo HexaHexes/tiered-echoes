@@ -3,7 +3,6 @@ package org.bitwisemadness.tieredechoes.common.upgrade;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import org.bitwisemadness.tieredechoes.common.gamerule.ProgressionRules;
 import org.bitwisemadness.tieredechoes.common.data.loader.ShippedDatapack;
 import org.bitwisemadness.tieredechoes.common.path.PathService;
 import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
@@ -12,7 +11,6 @@ import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
 import org.bitwisemadness.tieredechoes.testutil.TestBootstrap;
-import org.bitwisemadness.tieredechoes.testutil.TestConfig;
 import org.bitwisemadness.tieredechoes.testutil.TestTags;
 import org.bitwisemadness.tieredechoes.testutil.TestTiers;
 import org.junit.jupiter.api.AfterEach;
@@ -20,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -28,45 +27,39 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The progression contract: what an item keeps, what it spends, and when it advances.
+ * What an item carries between runs: which rung it sits on per ladder, and what the switches say
+ * about whether any of that is readable.
  *
  * <p>A synthetic three-tier ladder is installed rather than the shipped one so each test can pin an
- * exact experience number instead of reasoning about four tiers across every domain.</p>
+ * exact rung instead of reasoning about four tiers across every domain.</p>
  */
 class UpgradeServiceTest {
-
-    private static final int BETA_REQUIRED_XP = 100;
-    private static final int GAMMA_REQUIRED_XP = 250;
 
     private UpgradeService service;
 
     @BeforeEach
     void setUp() {
         TestBootstrap.init();
-        TestConfig.load();
         // Domain inference is tag-driven and a test JVM ships no datapack, so tags start unbound.
         // Clearing here keeps one test's binding from deciding another test's domains.
         TestTags.clear();
         this.service = UpgradeService.getInstance();
-        PolicyService.getInstance().replace(TierPolicy.defaults());
+        PolicyService.getInstance().applyResolved(TierPolicy.defaults());
         TierService.getInstance().replaceAll(List.of(
-                TestTiers.tier("alpha", TierDomain.WEAPON, 0, 0),
-                TestTiers.tier("beta", TierDomain.WEAPON, 1, BETA_REQUIRED_XP),
-                TestTiers.tier("gamma", TierDomain.WEAPON, 2, GAMMA_REQUIRED_XP)));
+                TestTiers.tier("alpha", TierDomain.WEAPON, 0),
+                TestTiers.tier("beta", TierDomain.WEAPON, 1),
+                TestTiers.tier("gamma", TierDomain.WEAPON, 2)));
         PathService.getInstance().replaceAll(List.of(
                 TestTiers.edge("alpha", "beta", TierDomain.WEAPON, 1,
-                        Optional.of(TestTiers.item("iron_ingot")), Optional.of(TestTiers.id("alpha")),
-                        Optional.of("branch_alpha_beta")),
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.empty(), Optional.of("branch_alpha_beta")),
                 TestTiers.edge("beta", "gamma", TierDomain.WEAPON, 2,
-                        Optional.of(TestTiers.item("diamond")), Optional.of(TestTiers.id("beta")),
-                        Optional.of("branch_beta_gamma"))));
+                        Optional.of(TestTiers.item("diamond")), Optional.empty(), Optional.of("branch_beta_gamma"))));
     }
 
     @AfterEach
     void tearDown() {
         ShippedDatapack.restoreShippedState();
-        PolicyService.getInstance().replace(TierPolicy.defaults());
-        TestConfig.resetToDefaults();
+        PolicyService.getInstance().applyResolved(TierPolicy.defaults());
         TestTags.clear();
     }
 
@@ -78,169 +71,7 @@ class UpgradeServiceTest {
         return this.service.applyTier(new ItemStack(Items.IRON_SWORD), tier(path));
     }
 
-    // ---------------------------------------------------------------- experience
-
-    @Test
-    void experienceAccumulatesOnTheStack() {
-        final ItemStack stack = new ItemStack(Items.IRON_SWORD);
-
-        this.service.addExperience(stack, TierDomain.WEAPON, 40);
-        this.service.addExperience(stack, TierDomain.WEAPON, 60);
-
-        assertEquals(100, this.service.getStoredExperience(stack, TierDomain.WEAPON));
-    }
-
-    @Test
-    void experienceIgnoresEmptyStacksAndNonPositiveAmounts() {
-        final ItemStack empty = ItemStack.EMPTY;
-        this.service.addExperience(empty, TierDomain.WEAPON, 50);
-        assertEquals(0, this.service.getStoredExperience(empty, TierDomain.WEAPON));
-
-        final ItemStack stack = new ItemStack(Items.IRON_SWORD);
-        this.service.addExperience(stack, TierDomain.WEAPON, 0);
-        this.service.addExperience(stack, TierDomain.WEAPON, -10);
-        assertEquals(0, this.service.getStoredExperience(stack, TierDomain.WEAPON));
-    }
-
-    @Test
-    void aNegativeStoredAmountIsClampedRatherThanRewindingProgression() {
-        final ItemStack stack = new ItemStack(Items.IRON_SWORD);
-
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, -25);
-
-        assertEquals(0, this.service.getStoredExperience(stack, TierDomain.WEAPON));
-    }
-
-    /** The read path must not need the TieredEchoes tag to exist at all. */
-    @Test
-    void anUntaggedStackReportsZeroExperience() {
-        assertEquals(0, this.service.getStoredExperience(new ItemStack(Items.IRON_SWORD), TierDomain.WEAPON));
-    }
-
-    // ---------------------------------------------------------------- the xp gate
-
-    /**
-     * Experience can arrive before any tier is written — a freshly crafted sword earns weapon
-     * experience from its first kill and has nothing recorded at all. Those ladders have state but
-     * no {@code tier_id}, so they have to be found by looking at which ladders have been touched at
-     * all rather than at which ones name a rung.
-     *
-     * <p>Getting onto the ladder is a step of its own now, because the path graph says nothing about
-     * it: there is no edge out of a tier the item does not have. So the chain opens with the
-     * bootstrap transition and then continues one rung per attempt, exactly as every later step
-     * does — {@code tryAutoUpgrade} advances an item one position, and reaching the requirement
-     * from untiered costs a call rather than a corner case.</p>
-     */
-    @Test
-    void anItemWithExperienceButNoWrittenTierStillClimbsFromTheInitialRung() {
-        // The first rung is resolved through the domain tag, so the sword has to be bound the way
-        // a datapack would bind it.
-        TestTags.bindVanillaWeaponDefaults();
-        final ItemStack stack = new ItemStack(Items.IRON_SWORD);
-        this.service.addExperience(stack, TierDomain.WEAPON,
-                this.tier("alpha").experienceRequired() + BETA_REQUIRED_XP);
-
-        final ItemStack joined = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
-
-        assertEquals(TestTiers.id("alpha"), this.service.getCurrentTier(joined, TierDomain.WEAPON).orElseThrow().id(),
-                "experience earned before any tier was written must put the item on the ladder");
-
-        final ItemStack upgraded = this.service.tryAutoUpgrade(joined, ProgressionRules.defaults()).orElseThrow();
-
-        assertEquals(TestTiers.id("beta"), this.service.getCurrentTier(upgraded, TierDomain.WEAPON).orElseThrow().id(),
-                "and the same experience must go on driving it upward after that");
-    }
-
-    @Test
-    void anItemJustBelowTheRequirementDoesNotAdvance() {
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP - 1);
-
-        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()));
-        assertEquals(TierDomain.WEAPON, this.service.getCurrentTier(stack).orElseThrow().domain());
-        assertEquals(TestTiers.id("alpha"), this.service.getCurrentTier(stack).orElseThrow().id());
-    }
-
-    @Test
-    void reachingTheRequirementAdvancesExactlyOneTierAndLeavesTheMaterialAlone() {
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP);
-
-        final ItemStack upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
-
-        assertEquals(TestTiers.id("beta"), this.service.getCurrentTier(upgraded).orElseThrow().id());
-        assertEquals(Items.IRON_SWORD, upgraded.getItem(), "tier changes, material does not");
-        assertEquals(0, this.service.getStoredExperience(upgraded, TierDomain.WEAPON), "an exact requirement spends everything");
-    }
-
-    @Test
-    void excessExperienceCarriesOverByDefault() {
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP + 35);
-
-        final ItemStack upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
-
-        assertEquals(35, this.service.getStoredExperience(upgraded, TierDomain.WEAPON));
-    }
-
-    /**
-     * {@code carry_over_excess_xp} in {@code tier_policies} used to own this. It no longer does.
-     * Pacing is a decision about a world rather than about the ladder a pack author ships to
-     * everyone, so the gamerule wins and the datapack field no longer reaches gameplay.
-     */
-    @Test
-    void theDatapackCarryOverFieldNoLongerOverridesTheGamerule() {
-        PolicyService.getInstance().replace(new TierPolicy(TierPolicy.Mode.HYBRID, TierPolicy.MultiPathResolution.RANDOM,
-                false, false, null));
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP + 35);
-
-        final ItemStack upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
-
-        assertEquals(35, this.service.getStoredExperience(upgraded, TierDomain.WEAPON),
-                "the gamerule wins, so a datapack asking for a reset has no effect");
-    }
-
-    /** The datapack asking to keep the excess must not block an operator from spending it. */
-    @Test
-    void theGameruleResetsThePoolWhateverThePolicyAsksFor() {
-        PolicyService.getInstance().replace(new TierPolicy(TierPolicy.Mode.HYBRID, TierPolicy.MultiPathResolution.RANDOM,
-                true, false, null));
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP + 35);
-
-        final ItemStack upgraded = this.service
-                .tryAutoUpgrade(stack, new ProgressionRules(true, true, true))
-                .orElseThrow();
-
-        assertEquals(0, this.service.getStoredExperience(upgraded, TierDomain.WEAPON));
-    }
-
-    @Test
-    void theSourceStackIsNeverMutatedInPlace() {
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP);
-
-        final ItemStack upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
-
-        assertNotSame(stack, upgraded);
-        assertEquals(TestTiers.id("alpha"), this.service.getCurrentTier(stack).orElseThrow().id(),
-                "callers rely on getting a new stack back, with the original left for the inventory");
-    }
-
-    // ---------------------------------------------------------------- material upgrades
-
-    /** A diamond-to-netherite smithing upgrade changes the item, not its tier bookkeeping. */
-    @Test
-    void applyingANewTierPreservesStoredExperience() {
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, 42);
-
-        final ItemStack retiered = this.service.applyTier(stack, tier("beta"));
-
-        assertEquals(42, this.service.getStoredExperience(retiered, TierDomain.WEAPON));
-        assertEquals(TestTiers.id("beta"), this.service.getCurrentTier(retiered).orElseThrow().id());
-    }
+    // ---------------------------------------------------------------- writing a rung
 
     @Test
     void applyingANewTierIsAPreviewFreeWriteSoTheNameStaysRenderedAtRenderTime() {
@@ -273,31 +104,136 @@ class UpgradeServiceTest {
         assertTrue(preview.getTag().getCompound("TieredEchoes")
                 .getCompound("domains").getCompound("weapon").getBoolean("preview"));
         assertEquals(TestTiers.id("gamma"), this.service.getCurrentTier(preview).orElseThrow().id());
-        assertEquals(0, this.service.getStoredExperience(preview, TierDomain.WEAPON), "a preview must not claim the item has earned anything");
+    }
+
+    @Test
+    void theSourceStackIsNeverMutatedInPlace() {
+        final ItemStack stack = new ItemStack(Items.IRON_SWORD);
+
+        final ItemStack upgraded = this.service.applyTier(stack, tier("alpha"));
+
+        assertNotSame(stack, upgraded);
+        assertTrue(this.service.getCurrentTier(stack).isEmpty(),
+                "callers rely on getting a new stack back, with the original left for the inventory");
+        assertEquals(TestTiers.id("alpha"), this.service.getCurrentTier(upgraded).orElseThrow().id());
+    }
+
+    // ---------------------------------------------------------------- reading a rung
+
+    @Test
+    void anUntaggedStackSitsOnNoLadder() {
+        assertTrue(this.service.getCurrentTier(new ItemStack(Items.IRON_SWORD)).isEmpty());
+        assertTrue(this.service.getAllCurrentTiers(new ItemStack(Items.IRON_SWORD)).isEmpty());
+    }
+
+    @Test
+    void thePresentedTierIsTheHighestRungHeldOnAnyLadder() {
+        final ItemStack stack = atTier("beta");
+
+        assertEquals(TestTiers.id("beta"), this.service.getCurrentTier(stack).orElseThrow().id(),
+                "the name line shows the highest rung, not whichever ladder happened to be read first");
+        assertEquals(TestTiers.id("beta"),
+                this.service.getCurrentTier(stack, TierDomain.WEAPON).orElseThrow().id(),
+                "the scoped read must agree with the unscoped one when only one ladder is involved");
+    }
+
+    @Test
+    void everyLadderTheItemSitsOnIsReportedTogether() {
+        final ItemStack stack = atTier("alpha");
+
+        final Map<TierDomain, TierDefinition> ladders = this.service.getAllCurrentTiers(stack);
+
+        assertEquals(1, ladders.size());
+        assertEquals(TestTiers.id("alpha"), ladders.get(TierDomain.WEAPON).id());
+    }
+
+    @Test
+    void aLadderWithNothingRecordedFallsBackToWhatTheTagsClaim() {
+        // Nothing has been written, so the only signal available is which ladders the item's tags
+        // bind it to — which is what a fresh item should be treated as wanting.
+        TestTags.bindVanillaWeaponDefaults();
+
+        final List<TierDomain> inferred = this.service.ladderDomains(new ItemStack(Items.IRON_SWORD));
+
+        assertEquals(List.of(TierDomain.WEAPON), inferred,
+                "an iron sword is bound by the weapon tag, and should offer the weapon ladder");
+    }
+
+    @Test
+    void anItemOnNoLadderAndInNoTagOffersNothing() {
+        TestTags.clear();
+
+        assertEquals(List.of(), this.service.ladderDomains(new ItemStack(Items.IRON_SWORD)));
+        assertEquals(List.of(), this.service.ladderDomains(ItemStack.EMPTY));
+    }
+
+    @Test
+    void anItemWithARungWrittenOffersThatLadderEvenIfItsTagsWereLaterNarrowed() {
+        final ItemStack stack = atTier("alpha");
+        TestTags.clear();
+
+        assertEquals(List.of(TierDomain.WEAPON), this.service.ladderDomains(stack),
+                "the compound says which ladders the item is actually on, and wins over a tag change");
+    }
+
+    // ---------------------------------------------------------------- the tier-system switch
+
+    /**
+     * {@code tier_system} governs whether a tier <em>exists</em> for a stack, not whether it has
+     * been taken away.
+     *
+     * <p>Both halves are asserted together because either alone is a trap: reading a rung while the
+     * system is off would mean the switch does nothing, and erasing the rung would mean turning the
+     * system back on could not bring it back.</p>
+     */
+    @Test
+    void switchingTheTierSystemOffHidesEveryRungWithoutRemovingIt() {
+        final ItemStack stack = atTier("gamma");
+        final CompoundTag before = stack.getTag().copy();
+
+        PolicyService.getInstance().applyResolved(new TierPolicy(false, true, true, true, true));
+
+        assertTrue(this.service.getCurrentTier(stack, TierDomain.WEAPON).isEmpty(),
+                "with the system off, the rung must not be readable");
+        assertTrue(this.service.getAllCurrentTiers(stack).isEmpty(),
+                "no ladder may answer while the system is off");
+        assertEquals(before, stack.getTag(), "switching a system off must not destroy what it wrote");
+
+        PolicyService.getInstance().applyResolved(TierPolicy.defaults());
+
+        assertEquals(TestTiers.id("gamma"), this.service.getCurrentTier(stack, TierDomain.WEAPON).orElseThrow().id(),
+                "handing the switch back must recover the rung from the untouched tag");
+    }
+
+    @Test
+    void switchingTheTierSystemOffDoesNotTouchTheLevelSystem() {
+        PolicyService.getInstance().applyResolved(new TierPolicy(false, true, true, true, true));
+        try {
+            assertTrue(PolicyService.getInstance().get().levellingSystem(),
+                    "the level system is independent and must keep its own switch");
+        } finally {
+            PolicyService.getInstance().applyResolved(TierPolicy.defaults());
+        }
     }
 
     // ---------------------------------------------------------------- downgrade
 
     /**
-     * Downgrades are disabled pending a rework of how the way down should be expressed.
+     * Downgrades are their own switch and no recipe route is generated for them yet.
      *
-     * <p>This replaces an assertion that a downgrade stepped back a rung and kept the experience.
-     * The behaviour is still there in {@code TierDowngradeRecipe} and its serializer — what is gone
-     * is the service path and the generated recipe, so this pins the gate itself: an attempt must be
-     * a no-op rather than a crash, and must not so much as touch the stored pool. Anything else
-     * would mean the disable is only partial and a re-enable is silently already done.</p>
+     * <p>Pinned as a no-op rather than a crash: a caller that has not learned the feature is live
+     * should not take the game with it, and the attempt must leave the item exactly where it was.
+     * Anything else would mean the disable is only partial and a re-enable is silently already
+     * done.</p>
      */
     @Test
-    void downgradingIsDisabledAndLeavesTheItemExactlyAsItWas() {
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, 42);
-        final ItemStack atBeta = this.service.applyTier(stack, tier("beta"));
+    void downgradingIsNotYetARouteAndLeavesTheItemExactlyAsItWas() {
+        final ItemStack atBeta = atTier("beta");
 
         final ItemStack downgraded = this.service.downgrade(atBeta, TierDomain.WEAPON);
 
         assertEquals(TestTiers.id("beta"), this.service.getCurrentTier(downgraded).orElseThrow().id(),
-                "a disabled downgrade must not move the item");
-        assertEquals(42, this.service.getStoredExperience(downgraded, TierDomain.WEAPON));
+                "an attempt must not move the item");
         assertNotSame(atBeta, downgraded, "the caller is handed a copy, never the stack it passed in");
     }
 
@@ -319,192 +255,6 @@ class UpgradeServiceTest {
                 this.service.getCurrentTier(this.service.downgrade(stack, TierDomain.WEAPON)).orElseThrow().id());
     }
 
-    // ---------------------------------------------------------------- branches and attunement
-
-    /**
-     * Attunement is disabled pending a rework of branching.
-     *
-     * <p>Replaces an assertion that a matching off-hand selected its branch. Leaving attunement live
-     * would mean an item silently recording a {@code selected_branch_id} that no edge can match any
-     * more, which reads as a bug rather than as a feature being off — so the seam has to stay shut
-     * and has to be pinned shut.</p>
-     */
-    @Test
-    void attuningIsDisabledAndSelectsNothing() {
-        final ItemStack main = atTier("alpha");
-
-        assertFalse(this.service.attuneStack(main, new ItemStack(Items.IRON_INGOT)));
-        assertTrue(this.service.getSelectedBranchId(main, TierDomain.WEAPON).isEmpty());
-
-        assertFalse(this.service.attuneStack(main, new ItemStack(Items.IRON_INGOT), TierDomain.WEAPON),
-                "the scoped overload must agree with the unscoped one");
-    }
-
-    @Test
-    void anOffhandThatMatchesNoBranchDoesNotAtune() {
-        final ItemStack main = atTier("alpha");
-
-        assertFalse(this.service.attuneStack(main, new ItemStack(Items.STICK)));
-        assertTrue(this.service.getSelectedBranchId(main, TierDomain.WEAPON).isEmpty());
-    }
-
-    /**
-     * A potato infers no domain at all, so there is no ladder to attune onto — unlike a fresh
-     * weapon, which correctly starts at the bottom tier of its domain.
-     */
-    @Test
-    void attuningAnItemThatCannotCarryAnyDomainIsRefused() {
-        assertFalse(this.service.attuneStack(new ItemStack(Items.POTATO), new ItemStack(Items.IRON_INGOT)));
-    }
-
-    @Test
-    void attunementIsConsumedByTheUpgradeItWasMadeFor() {
-        final ItemStack stack = atTier("alpha");
-        this.service.attuneStack(stack, new ItemStack(Items.IRON_INGOT));
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP);
-
-        final ItemStack upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
-
-        assertTrue(this.service.getSelectedBranchId(upgraded, TierDomain.WEAPON).isEmpty(),
-                "leaving the branch selection on the item would pin its next upgrade too");
-        assertEquals(TestTiers.id("beta"), this.service.getCurrentTier(upgraded).orElseThrow().id());
-    }
-
-    @Test
-    void attunementIsRecordedForDiagnosticsAndStaysOnTheItemUntilItIsUsed() {
-        final ItemStack stack = atTier("alpha");
-        this.service.attuneStack(stack, new ItemStack(Items.IRON_INGOT));
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP);
-
-        final ItemStack upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow();
-
-        assertEquals(Optional.of("branch_alpha_beta"),
-                Optional.of(upgraded.getTag().getCompound("TieredEchoes")
-                        .getCompound("domains").getCompound("weapon").getString("last_branch_id")));
-    }
-
-    /**
-     * A selection left over from a removed path is ignored rather than fatal.
-     *
-     * <p>This used to assert the opposite: that an unresolvable selection blocked the upgrade so
-     * the player could see what was wrong. Branch selection is disabled pending a rework, and
-     * nothing writes one any more — but an item upgraded by an older build still carries one, and
-     * treating it as a lock would mean such an item could never be upgraded again with no way to
-     * clear the field. The upgrade proceeds and clears the stale value on the way through.</p>
-     */
-    @Test
-    void aStaleBranchSelectionDoesNotBlockTheUpgrade() {
-        final ItemStack stack = atTier("alpha");
-        stack.getOrCreateTagElement("TieredEchoes")
-                .getCompound("domains").getCompound("weapon").putString("selected_branch_id", "branch_beta_gamma");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP);
-
-        final Optional<ItemStack> upgraded = this.service.tryAutoUpgrade(stack, ProgressionRules.defaults());
-
-        assertEquals(TestTiers.id("beta"), this.service.getCurrentTier(upgraded.orElseThrow()).orElseThrow().id());
-        assertEquals(Optional.empty(), this.service.getSelectedBranchId(upgraded.orElseThrow(), TierDomain.WEAPON),
-                "the stale selection is discarded rather than carried onto the new rung");
-    }
-
-    @Test
-    void clearingASelectionLeavesTheRestOfTheTierStateIntact() {
-        final ItemStack stack = atTier("alpha");
-        this.service.attuneStack(stack, new ItemStack(Items.IRON_INGOT));
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, 17);
-
-        this.service.clearSelectedBranch(stack, TierDomain.WEAPON);
-
-        assertTrue(this.service.getSelectedBranchId(stack, TierDomain.WEAPON).isEmpty());
-        assertEquals(TestTiers.id("alpha"), this.service.getCurrentTier(stack).orElseThrow().id());
-        assertEquals(17, this.service.getStoredExperience(stack, TierDomain.WEAPON));
-    }
-
-    // ---------------------------------------------------------------- gates
-
-    @Test
-    void nothingAdvancesWhileTheXpSystemIsSwitchedOff() {
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP * 10);
-
-        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, new ProgressionRules(false, true, false)));
-        assertEquals(TestTiers.id("alpha"), this.service.getCurrentTier(stack).orElseThrow().id());
-    }
-
-    @Test
-    void nothingAdvancesWhileXpIsSwitchedOffEvenForTheSinglePathCase() {
-        final ItemStack stack = atTier("beta");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, GAMMA_REQUIRED_XP);
-
-        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, new ProgressionRules(false, true, false)));
-    }
-
-    /** teAutoUpgrade is the whole switch, not only the ambiguous multi-path case. */
-    @Test
-    void nothingAdvancesWhileAutoUpgradeIsSwitchedOffEvenWithPlentyOfExperience() {
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP * 10);
-
-        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, new ProgressionRules(true, false, false)));
-        assertEquals(TestTiers.id("alpha"), this.service.getCurrentTier(stack).orElseThrow().id());
-    }
-
-    /** teResetExperienceOnUpgrade spends the pool instead of carrying the excess over. */
-    @Test
-    void resettingExperienceOnUpgradeSpendsTheWholePool() {
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP + 40);
-
-        final ItemStack upgraded = this.service
-                .tryAutoUpgrade(stack, new ProgressionRules(true, true, true))
-                .orElseThrow();
-
-        assertEquals(TestTiers.id("beta"), this.service.getCurrentTier(upgraded).orElseThrow().id());
-        assertEquals(0, this.service.getStoredExperience(upgraded, TierDomain.WEAPON));
-    }
-
-    /** The default keeps the excess, which is what every earlier build did. */
-    @Test
-    void carryingExperienceOverKeepsTheExcessByDefault() {
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP + 40);
-
-        final ItemStack upgraded = this.service
-                .tryAutoUpgrade(stack, ProgressionRules.defaults())
-                .orElseThrow();
-
-        assertEquals(40, this.service.getStoredExperience(upgraded, TierDomain.WEAPON));
-    }
-
-    @Test
-    void smithingOnlyPolicyStopsXpFromDrivingProgression() {
-        PolicyService.getInstance().replace(new TierPolicy(TierPolicy.Mode.SMITHING_ONLY,
-                TierPolicy.MultiPathResolution.FIRST, true, false, null));
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP * 10);
-
-        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()));
-    }
-
-    @Test
-    void autoOnlyPolicyStillDrivesProgression() {
-        PolicyService.getInstance().replace(new TierPolicy(TierPolicy.Mode.AUTO_ONLY,
-                TierPolicy.MultiPathResolution.FIRST, true, false, null));
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, BETA_REQUIRED_XP);
-
-        assertEquals(TestTiers.id("beta"),
-                this.service.getCurrentTier(this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()).orElseThrow()).orElseThrow().id());
-    }
-
-    @Test
-    void reachingTheTopOfTheLadderStopsAdvancingRatherThanErroring() {
-        final ItemStack stack = atTier("gamma");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, 10_000);
-
-        assertEquals(Optional.empty(), this.service.tryAutoUpgrade(stack, ProgressionRules.defaults()));
-        assertEquals(TestTiers.id("gamma"), this.service.getCurrentTier(stack).orElseThrow().id());
-    }
-
     // ---------------------------------------------------------------- description
 
     @Test
@@ -515,14 +265,10 @@ class UpgradeServiceTest {
     }
 
     @Test
-    void describeStackSummarisesTierExperienceAndBranch() {
-        final ItemStack stack = atTier("alpha");
-        this.service.setStoredExperience(stack, TierDomain.WEAPON, 12);
+    void describeStackSummarisesEveryLadderTheItemSitsOn() {
+        final String described = this.service.describeStack(atTier("alpha")).getString();
 
-        final String described = this.service.describeStack(stack).getString();
-
+        assertTrue(described.contains("Iron Sword"), described);
         assertTrue(described.contains("tier=" + TestTiers.id("alpha")), described);
-        assertTrue(described.contains("xp=12"), described);
-        assertTrue(described.contains("branch=none"), described);
     }
 }

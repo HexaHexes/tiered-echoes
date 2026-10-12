@@ -77,20 +77,20 @@ class ShippedDatapackTest {
     /**
      * The first rung must cost something, or a tierless item climbs the ladder for free.
      *
-     * <p>Experience is checked against the edge's target tier, so the rung being joined is the one
-     * whose requirement is spent — and an untiered item reaches the bootstrap transition the moment
-     * any experience is awarded. A first rung priced at zero would put every new sword in a domain
-     * on the ladder with no action from its owner.</p>
+     * <p>What joining costs is now the smithing addition alone — there is no pool to spend — so the
+     * check is that every domain opens with a real material rather than an empty slot. It reads
+     * across all built-in domains rather than only the weapon one, which is where the material list
+     * above stops.</p>
      */
     @Test
-    void theFirstRungCostsExperienceSoATierlessItemDoesNotJoinForFree() {
+    void theFirstRungOfEveryDomainCostsAMaterialSoNothingJoinsForFree() {
         for (final TierDomain domain : TierDomain.builtinDomains()) {
             final TierDefinition first = ShippedDatapack.load().tiers().stream()
                     .filter(tier -> tier.domain() == domain)
                     .findFirst()
                     .orElseThrow();
-            assertTrue(first.experienceRequired() > 0,
-                    domain + "'s first rung is free, so its items tier themselves at no cost");
+            assertTrue(first.upgradeIngredient().toIngredient().getItems().length > 0,
+                    domain + "'s first rung takes nothing in the addition slot, so joining it is free");
         }
     }
 
@@ -172,7 +172,7 @@ class ShippedDatapackTest {
     @Test
     void everyShippedTransitionHasAnAdditionAndNoneHasADowngradeTarget() {
         for (final TierEdge edge : ShippedDatapack.load().edges()) {
-            assertTrue(edge.attunementIngredient().isPresent(),
+            assertTrue(edge.additionIngredient().isPresent(),
                     edge.from() + " -> " + edge.to() + " has no addition, so its smithing recipe cannot be generated");
             assertFalse(edge.downgradeTo().isPresent(),
                     edge.from() + " -> " + edge.to() + " declares a downgrade target, but downgrades are disabled");

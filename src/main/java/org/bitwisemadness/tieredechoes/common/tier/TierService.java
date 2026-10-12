@@ -12,6 +12,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import org.bitwisemadness.tieredechoes.api.common.ITierService;
+import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
 import org.bitwisemadness.tieredechoes.common.registry.TieredEchoesTagKeys;
 
 import java.util.ArrayList;
@@ -130,10 +131,9 @@ public final class TierService implements ITierService {
      * common, and the smithing table could not tell a fresh item from an upgraded one.</p>
      *
      * <p>An item is now untiered until something says otherwise. Untiered gear scales nothing, shows
-     * no bracket and costs copper — or the first rung's experience — to join the ladder, which is
-     * what puts the bootstrap transition in {@code TierBootstrapRecipe} and the climb in
-     * {@code UpgradeService#tryAutoUpgradeDomain} in reach of a real failure rather than a
-     * theoretical one.</p>
+     * no bracket and costs copper - or whatever the first rung's {@code upgrade_ingredient} names -
+     * to join the ladder, which is what puts the bootstrap transition in
+     * {@code TierBootstrapRecipe} in reach of a real failure rather than a theoretical one.</p>
      */
     public synchronized Optional<TierDefinition> getInitialTierForItem(final Item item, final TierDomain preferredDomain) {
         return Optional.empty();
@@ -405,8 +405,8 @@ public final class TierService implements ITierService {
      * Reads every ladder this stack carries, keyed by domain.
      *
      * <p>Ladder state lives under {@code TieredEchoes.domains.<domain>} so that an item in two tags
-     * climbs both ladders independently — an axe earns weapon experience from kills and tool
-     * experience from mining, and neither pool advances the other.</p>
+     * sits on two ladders independently — an axe is a weapon and a tool, and neither rung may stand
+     * in for the other.</p>
      */
     public synchronized Map<TierDomain, TierDefinition> readAllTiersFromNbt(final ItemStack stack) {
         final LinkedHashMap<TierDomain, TierDefinition> result = new LinkedHashMap<>();
@@ -434,9 +434,9 @@ public final class TierService implements ITierService {
     /**
      * The ladders this stack has any recorded state on, whether or not that state names a rung.
      *
-     * <p>Experience can arrive before a tier is written, so a ladder holding only a pool of
-     * experience still counts: it is a ladder the item is climbing, it simply has not been tiered
-     * yet. Iteration follows enum declaration order so the result is deterministic.</p>
+     * <p>A ladder compound may exist without naming a rung, and it still counts: it is a ladder the
+     * item is on, it simply has not been raised to a rung yet. Iteration follows enum declaration
+     * order so the result is deterministic.</p>
      */
     public synchronized List<TierDomain> recordedLadderDomains(final ItemStack stack) {
         final CompoundTag te = stackTe(stack);
@@ -473,7 +473,22 @@ public final class TierService implements ITierService {
         return this.getTier(tierId, domain);
     }
 
+    /**
+     * The mod's own tag on a stack, or null when there is nothing to read.
+     *
+     * <p>Every read of tier state goes through here, which is what makes {@code tier_system} a
+     * single switch: when it is off, this reports "no tag" and the rung a stack carries simply does
+     * not exist as far as scaling, names, rarity and ladder membership are concerned. The tag itself
+     * is untouched — switching a system off makes the game forget a thing exists, not destroy it,
+     * so turning it back on recovers what was there.</p>
+     *
+     * <p>Deliberately not on the write path: {@code UpgradeService} creates the tag directly, so an
+     * operator can disable tiers for a world and still have items that remember their rungs.</p>
+     */
     private static CompoundTag stackTe(final ItemStack stack) {
+        if (!PolicyService.getInstance().get().tierSystem()) {
+            return null;
+        }
         if (stack.isEmpty() || !stack.hasTag() || !stack.getTag().contains(ROOT_TAG)) {
             return null;
         }

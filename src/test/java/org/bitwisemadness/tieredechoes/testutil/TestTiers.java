@@ -29,14 +29,13 @@ public final class TestTiers {
         return new ResourceLocation(NAMESPACE, path);
     }
 
-    public static TierDefinition tier(final String path, final TierDomain domain, final int sortOrder, final int experienceRequired) {
+    public static TierDefinition tier(final String path, final TierDomain domain, final int sortOrder) {
         return new TierDefinition(
                 id(path),
                 domain,
                 1,
                 Rarity.COMMON,
                 sortOrder,
-                experienceRequired,
                 new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", "stick")),
                 Optional.empty(),
                 Optional.empty(),
@@ -59,8 +58,6 @@ public final class TestTiers {
                 addition,
                 downgradeTo,
                 Optional.of(NAMESPACE),
-                Optional.empty(),
-                Optional.empty(),
                 displayBranchId,
                 Map.of());
     }

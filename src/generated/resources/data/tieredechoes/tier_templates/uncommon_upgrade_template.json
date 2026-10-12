@@ -1,7 +1,5 @@
 {
   "id": "tieredechoes:uncommon_upgrade_template",
   "item": "tieredechoes:uncommon_upgrade_template",
-  "kind": "upgrade",
-  "schema_version": 1,
-  "tier": "tieredechoes:uncommon"
+  "schema_version": 1
 }

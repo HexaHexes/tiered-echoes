@@ -1,33 +1,21 @@
 package org.bitwisemadness.tieredechoes.common;
 
 import com.google.common.collect.Multimap;
-import net.minecraft.ChatFormatting;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.ItemAttributeModifierEvent;
-import net.minecraftforge.event.entity.player.ItemTooltipEvent;
 import net.minecraftforge.eventbus.api.Event;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
-import org.bitwisemadness.tieredechoes.common.experience.ExperienceTooltip;
-import org.bitwisemadness.tieredechoes.common.network.client.DisplayEdge;
-import org.bitwisemadness.tieredechoes.common.network.client.SyncedProgressionState;
-import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
-import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
-import org.bitwisemadness.tieredechoes.common.upgrade.UpgradeService;
 
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -188,55 +176,6 @@ public final class CommonForgeEvents {
         final var attrId = net.minecraftforge.registries.ForgeRegistries.ATTRIBUTES.getKey(attribute);
         if (attrId != null && (attrId.getNamespace().contains("ars") || attrId.getNamespace().contains("legendary") || attrId.getNamespace().contains("lso") || attrId.getNamespace().contains("survival"))) {
             TieredEchoes.LOGGER.debug("[CommonForgeEvents] Saw unrecognized modded attribute {} ({}) on {}", attrId, attribute.getDescriptionId(), stack.getItem());
-        }
-    }
-
-    @Mod.EventBusSubscriber(modid = TieredEchoes.MOD_ID, value = Dist.CLIENT)
-    public static final class ClientTooltips {
-        private ClientTooltips() {}
-
-        @SubscribeEvent
-        public static void onItemTooltip(final ItemTooltipEvent event) {
-            final ItemStack stack = event.getItemStack();
-            final UpgradeService upgrade = UpgradeService.getInstance();
-            final List<TierDomain> ladders = upgrade.ladderDomains(stack);
-            if (ladders.isEmpty()) {
-                return;
-            }
-            TieredEchoes.LOGGER.debug("[CommonForgeEvents] Tiered stack tooltip observed for {} ladders {}",
-                    stack.getItem(), ladders);
-
-            // The gamerule is per-world and vanilla gives a client no way to read it, so the value
-            // shown here arrived over the mod's own sync channel. See SyncedProgressionState.
-            if (!SyncedProgressionState.itemExperienceEnabled()) {
-                return;
-            }
-
-            // An axe climbs both the weapon and the tool ladder, so it has two pools and two next
-            // thresholds. Each gets its own line: collapsing them to one would show a single number
-            // that belongs to neither ladder. A ladder the item has earned experience on but not yet
-            // been tiered still gets a line, because that experience is the progress it is sitting on.
-            for (final TierDomain domain : ladders) {
-                final TierDefinition tier = upgrade.getCurrentTier(stack, domain).orElse(null);
-                if (tier == null) {
-                    continue;
-                }
-                final List<Integer> costs = new ArrayList<>(2);
-                for (final DisplayEdge edge : SyncedProgressionState.nextEdges(tier.id(), domain)) {
-                    final Optional<Integer> override = edge.experienceRequirementOverride();
-                    if (override.isPresent()) {
-                        costs.add(override.get());
-                        continue;
-                    }
-                    // A target the datapack no longer defines is skipped rather than treated as free.
-                    TierService.getInstance().getTier(edge.to(), edge.domain())
-                            .map(TierDefinition::experienceRequired)
-                            .ifPresent(costs::add);
-                }
-                ExperienceTooltip.nextThreshold(costs).ifPresent(threshold -> event.getToolTip().add(
-                        Component.literal(ExperienceTooltip.format(upgrade.getStoredExperience(stack, domain), threshold))
-                                .withStyle(ChatFormatting.DARK_GRAY)));
-            }
         }
     }
 }

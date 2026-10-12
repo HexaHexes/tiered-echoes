@@ -2,7 +2,7 @@
   "domain": "armor",
   "edges": [
     {
-      "attunement_ingredient": {
+      "addition": {
         "item": "minecraft:iron_ingot"
       },
       "display_branch_id": "armor_common_to_uncommon",
@@ -11,7 +11,7 @@
       "to": "tieredechoes:uncommon"
     },
     {
-      "attunement_ingredient": {
+      "addition": {
         "item": "minecraft:gold_ingot"
       },
       "display_branch_id": "armor_uncommon_to_rare",
@@ -20,7 +20,7 @@
       "to": "tieredechoes:rare"
     },
     {
-      "attunement_ingredient": {
+      "addition": {
         "item": "minecraft:diamond"
       },
       "display_branch_id": "armor_rare_to_epic",
@@ -29,7 +29,7 @@
       "to": "tieredechoes:epic"
     },
     {
-      "attunement_ingredient": {
+      "addition": {
         "item": "minecraft:netherite_ingot"
       },
       "display_branch_id": "armor_epic_to_legendary",

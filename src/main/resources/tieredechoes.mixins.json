@@ -8,8 +8,7 @@
     "ItemStackRarityMixin",
     "ItemStackNameMixin",
     "ItemStackDurabilityMixin",
-    "GameRulesAccessor",
-    "BooleanValueAccessor"
+    "GameRulesAccessor"
   ],
   "client": [],
   "server": [],

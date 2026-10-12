@@ -77,7 +77,7 @@ public final class TierRecipeGenerator {
         // Downgrades are not generated at all right now — the way down is disabled pending a rework,
         // so publishing recipes for it would advertise a transition the menu cannot perform. The
         // serializer stays registered so a datapack that writes one by hand still loads.
-        final boolean publishUpgrades = PolicyService.getInstance().get().upgradeRecipesEnabled();
+        final boolean publishUpgrades = PolicyService.getInstance().get().upgradesPublished();
         if (publishUpgrades) {
             for (final TierDomain domain : TierDomain.builtinDomains()) {
                 addBootstrap(generated, report, domain);
@@ -151,7 +151,7 @@ public final class TierRecipeGenerator {
         final Ingredient addition = additionFor(edge, target);
         if (addition.isEmpty()) {
             report.add(new ValidationIssue(ValidationIssue.Severity.WARNING, "missing_upgrade_addition",
-                    "Edge has no attunement ingredient and its target tier has no upgrade ingredient; no smithing recipe was generated.",
+                    "Edge declares no addition and its target tier has no upgrade ingredient; no smithing recipe was generated.",
                     Map.of("edge", edge.from() + "->" + edge.to(), "domain", edge.domain().getSerializedName())));
             return;
         }
@@ -183,9 +183,9 @@ public final class TierRecipeGenerator {
                 Map.of("edge", edge.from() + "->" + edge.to(), "domain", edge.domain().getSerializedName(), "tier", tier.id().toString()));
     }
 
-    /** The edge's attunement ingredient wins; the target tier's upgrade ingredient is the fallback. */
+    /** The edge's own addition wins; the target tier's upgrade ingredient is the fallback. */
     private static Ingredient additionFor(final TierEdge edge, final TierDefinition target) {
-        final Optional<IngredientMatcher> declared = edge.attunementIngredient()
+        final Optional<IngredientMatcher> declared = edge.additionIngredient()
                 .or(() -> Optional.ofNullable(target.upgradeIngredient()));
         return declared.map(IngredientMatcher::toIngredient).orElse(Ingredient.EMPTY);
     }

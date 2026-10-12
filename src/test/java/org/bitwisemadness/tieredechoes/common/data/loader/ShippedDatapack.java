@@ -122,7 +122,7 @@ public final class ShippedDatapack {
                     if (domain == null) {
                         continue;
                     }
-                    edges.add(TieredEchoesDataReloader.parseEdge(edge, domain, registrationOrder++, file.id().toString()));
+                    edges.add(TieredEchoesDataReloader.parseEdge(edge, domain, registrationOrder++, file.id().toString(), report));
                 } catch (final RuntimeException exception) {
                     report.add(failure(file, exception));
                 }
@@ -150,7 +150,7 @@ public final class ShippedDatapack {
         TierService.getInstance().replaceAll(loaded.tiers());
         PathService.getInstance().replaceAll(loaded.edges());
         TemplateService.getInstance().replaceAll(loaded.templates());
-        PolicyService.getInstance().replace(TierPolicy.defaults());
+        PolicyService.getInstance().replaceFromDatapack(TierPolicy.defaults());
         return loaded;
     }
 

@@ -16,7 +16,6 @@
   "curios_set_bonuses": {},
   "display_rarity": "UNCOMMON",
   "domain": "armor",
-  "experience_required": 200,
   "generated_downgrade_template": false,
   "generated_upgrade_template": true,
   "id": "tieredechoes:uncommon",

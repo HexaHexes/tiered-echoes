@@ -1,70 +1,62 @@
 package org.bitwisemadness.tieredechoes.common.policy;
 
-import java.util.Optional;
-
 /**
- * Datapack-driven rules for how tier progression behaves, loaded from {@code tier_policies}.
+ * Datapack-driven switches for tier progression, loaded from {@code tier_policies}.
  *
- * <p>The built-in defaults keep both progression routes open. A datapack can close either one:
- * {@code AUTO_ONLY} removes the smithing recipes and lets experience drive everything, while
- * {@code SMITHING_ONLY} keeps the smithing table as the sole route.</p>
+ * <p>Each field is a switch with two halves, and the halves mean different things:
  *
- * @param mode                 which progression routes are available
- * @param multiPathResolution  how a branch is chosen when several are eligible and none is attuned
- * @param carryOverExcessXp    <b>Superseded.</b> Whether xp left over after an upgrade is kept
- *                             rather than spent is now the {@code teResetExperienceOnUpgrade}
- *                             gamerule, and the gamerule wins. The field is still parsed so
- *                             existing packs keep loading, but it no longer reaches gameplay.
- * @param disableUpgradeRecipes explicit kill-switch that applies on top of {@code mode}
- * @param consumeAttunementItem {@code null} means "defer to the server config file"
+ * <ul>
+ *   <li><b>{@code tier_system} / {@code levelling_system}</b> — existence. Switching one off makes
+ *       the mod ignore the NBT that system wrote. It is never erased, so a datapack or operator can
+ *       turn a system off, ship something else in its place, and turn it back on with the original
+ *       state intact.</li>
+ *   <li><b>{@code tier_upgrades} / {@code level_up} / {@code downgrades}</b> — progression. The
+ *       system still exists and its state still reads, but nothing may move an item along it.</li>
+ * </ul>
+ *
+ * <p>That distinction is why there are five rather than two: an operator has to be able to keep
+ * tiers readable while closing the smithing route, and a world that forbids downgrades is not the
+ * same as a world that has never heard of them.</p>
+ *
+ * <p>Every switch can be overridden per world by a tri-state gamerule; see
+ * {@link org.bitwisemadness.tieredechoes.common.gamerule.TEGameRules}. What gameplay reads is the
+ * resolved value, held by {@link PolicyService}.</p>
+ *
+ * <p>{@code levelling_system} and {@code level_up} are parsed, synced and honoured from the moment
+ * they are declared, but the Level system they govern does not exist yet. They are shipped now so
+ * the schema and the gamerule set do not change twice; a pack that sets them early is simply
+ * setting a switch nothing reads yet.</p>
+ *
+ * @param tierSystem     whether tiered items carry a tier at all
+ * @param tierUpgrades   whether the smithing upgrade route is published
+ * @param levellingSystem whether items carry a level at all
+ * @param levelUp        whether an item may gain a level
+ * @param downgrades     whether the smithing downgrade route is published
  */
 public record TierPolicy(
-        Mode mode,
-        MultiPathResolution multiPathResolution,
-        boolean carryOverExcessXp,
-        boolean disableUpgradeRecipes,
-        Boolean consumeAttunementItem
+        boolean tierSystem,
+        boolean tierUpgrades,
+        boolean levellingSystem,
+        boolean levelUp,
+        boolean downgrades
 ) {
 
-    public enum Mode {
-        /** Both XP accumulation and smithing recipes are available. */
-        HYBRID,
-        /** Only XP accumulation; generated upgrade recipes are not published. */
-        AUTO_ONLY,
-        /** Only the smithing table; XP is stored but never triggers an upgrade. */
-        SMITHING_ONLY
-    }
-
-    public enum MultiPathResolution {
-        /** Deterministically take the first eligible branch. */
-        FIRST,
-        /** Pick an eligible branch pseudo-randomly per item. */
-        RANDOM
-    }
-
-    public TierPolicy {
-        mode = mode == null ? Mode.HYBRID : mode;
-        multiPathResolution = multiPathResolution == null ? MultiPathResolution.RANDOM : multiPathResolution;
-    }
-
     public static TierPolicy defaults() {
-        return new TierPolicy(Mode.HYBRID, MultiPathResolution.RANDOM, true, false, null);
-    }
-
-    public boolean autoUpgradeEnabled() {
-        return this.mode != Mode.SMITHING_ONLY;
-    }
-
-    public boolean upgradeRecipesEnabled() {
-        return this.mode != Mode.AUTO_ONLY && !this.disableUpgradeRecipes;
+        return new TierPolicy(true, true, true, true, true);
     }
 
     /**
-     * Whether shift-right-click attunement should eat the offhand ingredient. A datapack that states
-     * a value wins; otherwise the operator's config decides — see
-     * {@link PolicyService#consumeAttunementItem()}.
+     * Whether upgrade recipes may be published.
+     *
+     * <p>Gated on the system too, because publishing a recipe for a system that is switched off
+     * would let a player take a transition whose result the game then refuses to read.</p>
      */
-    public Optional<Boolean> declaredConsumeAttunementItem() {
-        return Optional.ofNullable(this.consumeAttunementItem);
+    public boolean upgradesPublished() {
+        return this.tierSystem && this.tierUpgrades;
+    }
+
+    /** The same gate for the way down; see {@link #downgrades()}. */
+    public boolean downgradesPublished() {
+        return this.tierSystem && this.downgrades;
     }
 }
