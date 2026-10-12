@@ -117,7 +117,7 @@ public final class TemplateTintSpriteLoader implements ITextureAtlasSpriteLoader
     public TextureAtlasSprite makeSprite(final ResourceLocation atlasName, final SpriteContents contents,
                                          final int atlasWidth, final int atlasHeight,
                                          final int spriteX, final int spriteY, final int mipmapLevel) {
-        return new TemplateSprite(atlasName, contents, spriteX, spriteY, atlasWidth, atlasHeight);
+        return new TemplateSprite(atlasName, contents, atlasWidth, atlasHeight, spriteX, spriteY);
     }
 
     /**
@@ -339,9 +339,14 @@ public final class TemplateTintSpriteLoader implements ITextureAtlasSpriteLoader
 
     /** Exposes the protected {@link TextureAtlasSprite} constructor, which is protected by design. */
     private static final class TemplateSprite extends TextureAtlasSprite {
+        /**
+         * Takes its arguments in vanilla's order — atlas size, then position — so that this one call
+         * is the only place the mapping matters. Vanilla divides position by atlas size to get UVs,
+         * so swapping the two sends the sprite's UVs out past the edge of the atlas entirely.
+         */
         private TemplateSprite(final ResourceLocation atlasLocation, final SpriteContents contents,
-                               final int x, final int y, final int atlasWidth, final int atlasHeight) {
-            super(atlasLocation, contents, x, y, atlasWidth, atlasHeight);
+                               final int atlasWidth, final int atlasHeight, final int x, final int y) {
+            super(atlasLocation, contents, atlasWidth, atlasHeight, x, y);
         }
     }
 }
