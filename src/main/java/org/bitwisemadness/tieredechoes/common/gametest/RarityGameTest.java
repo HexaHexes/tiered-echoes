@@ -3,11 +3,13 @@ package org.bitwisemadness.tieredechoes.common.gametest;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Rarity;
 import net.minecraftforge.gametest.GameTestHolder;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.rarity.TERarities;
+import org.bitwisemadness.tieredechoes.common.registry.TEItems;
 
 /**
  * {@code Rarity} cannot be extended in a unit test: appending a constant needs Forge's runtime enum
@@ -76,6 +78,26 @@ public final class RarityGameTest {
 
         helper.assertTrue(stack.getRarity() == legendary,
                 "expected the LEGENDARY constant but got " + stack.getRarity());
+
+        helper.succeed();
+    }
+
+    /**
+     * The template item declares its rarity once, when it is registered, rather than reading it
+     * back out of NBT the way a tiered item does — so it fails through a different route and needs
+     * its own assertion. It reached {@code COMMON} by falling through the tier lookup, which no
+     * other test could see: the rarity itself registered fine, and a tiered item of the same tier
+     * still rendered golden.
+     */
+    @GameTest
+    public static void theLegendaryTemplateIsRegisteredAsTheLegendaryRarity(final GameTestHelper helper) {
+        final Rarity legendary = TERarities.legendary()
+                .orElseThrow(() -> new GameTestAssertException("LEGENDARY was never registered"));
+        final Item template = TEItems.UPGRADE_TEMPLATES.get("legendary").get();
+        final Rarity declared = template.getDefaultInstance().getRarity();
+
+        helper.assertTrue(declared == legendary,
+                "the legendary template declares " + declared + ", not LEGENDARY");
 
         helper.succeed();
     }

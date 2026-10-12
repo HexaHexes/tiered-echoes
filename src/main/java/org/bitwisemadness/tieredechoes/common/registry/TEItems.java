@@ -45,9 +45,15 @@ public final class TEItems {
 	/**
 	 * {@code LEGENDARY} is absent from the source enum and only exists once {@link TERarities} has
 	 * extended it, so it cannot appear as a literal in the table above.
+	 *
+	 * <p>Tier ids are lowercase and the rarity constant is uppercase, so this compares
+	 * case-insensitively. Doing it the other way silently returns {@link Rarity#COMMON} instead of
+	 * failing: the legendary tier is the one name missing from the table, so the lookup falls
+	 * through to the default and the template registers as plain white — which reads as a cosmetic
+	 * quirk rather than the broken branch selection it actually is.</p>
 	 */
 	private static Rarity rarityFor(final String tier) {
-		if (TERarities.LEGENDARY.equals(tier)) {
+		if (TERarities.LEGENDARY.equalsIgnoreCase(tier)) {
 			return TERarities.legendary().orElse(Rarity.EPIC);
 		}
 		return BUILTIN_TIER_RARITIES.getOrDefault(tier, Rarity.COMMON);
