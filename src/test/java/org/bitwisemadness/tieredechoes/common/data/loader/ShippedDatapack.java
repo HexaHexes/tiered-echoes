@@ -2,6 +2,21 @@ package org.bitwisemadness.tieredechoes.common.data.loader;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.GsonHelper;
+import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
+import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
+import org.bitwisemadness.tieredechoes.common.level.LevelConfig;
+import org.bitwisemadness.tieredechoes.common.level.LevelService;
+import org.bitwisemadness.tieredechoes.common.path.PathService;
+import org.bitwisemadness.tieredechoes.common.path.TierEdge;
+import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
+import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
+import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
+import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
+import org.bitwisemadness.tieredechoes.common.tier.TierService;
+import org.bitwisemadness.tieredechoes.common.template.TemplateDefinition;
+import org.bitwisemadness.tieredechoes.common.template.TemplateService;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -150,6 +165,10 @@ public final class ShippedDatapack {
         PathService.getInstance().replaceAll(loaded.edges());
         TemplateService.getInstance().replaceAll(loaded.templates());
         PolicyService.getInstance().replaceFromDatapack(TierPolicy.defaults());
+        // The shipped datapack declares no levels block, so the shipped curves are the Java
+        // defaults; resetting them here is what keeps a test that overrode them from leaking its
+        // cost curve into the next one.
+        LevelService.getInstance().replaceAll(LevelConfig.defaults());
         return loaded;
     }
 
