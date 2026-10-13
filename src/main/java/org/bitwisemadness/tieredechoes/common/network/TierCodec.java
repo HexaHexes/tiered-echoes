@@ -66,7 +66,7 @@ final class TierCodec {
         final Optional<ResourceLocation> downgradeTemplateTexture = readOptionalResource(buf);
         return new TierDefinition(id, domain, schemaVersion, rarity, sortOrder, upgrade,
                 downgrade, previousTier, sourcePack, multipliers, setBonuses, compat,
-                generatedDowngradeTemplate, generatedUpgradeTemplate,
+                generatedUpgradeTemplate, generatedDowngradeTemplate,
                 upgradeTemplateId, downgradeTemplateId, upgradeTemplateTexture, downgradeTemplateTexture);
     }
 

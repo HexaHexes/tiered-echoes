@@ -128,14 +128,22 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
     }
 
     static TemplateDefinition parseTemplate(final ResourceLocation source, final JsonObject json) {
-        // The template format has been simplified: {@code tier} and {@code kind} were removed in PR B.
-        // Templates are now reusable named entities; the {@code id} field is the source of truth,
-        // and the {@code item} field names the template item.
+        final String kind = GsonHelper.getAsString(json, "kind", "upgrade");
+        final boolean downgrade = switch (kind.toLowerCase(java.util.Locale.ROOT)) {
+            case "downgrade" -> true;
+            case "upgrade" -> false;
+            default -> throw new IllegalArgumentException("Unknown template kind \"" + kind + "\"; expected upgrade or downgrade");
+        };
+        // No domain field: a tier has one upgrade template and one downgrade template regardless of
+        // which item type carries the tier, and the template items were never domain-specific. A
+        // "domain" key left over from older data files is simply not read.
         return new TemplateDefinition(
                 new ResourceLocation(GsonHelper.getAsString(json, "id", source.toString())),
+                new ResourceLocation(GsonHelper.getAsString(json, "tier")),
+                downgrade,
                 optionalResource(json, "item"),
-                Optional.empty(),
-                optionalResource(json, "texture"));
+                optionalResource(json, downgrade ? "downgrade_template_item_model" : "upgrade_template_item_model"),
+                optionalResource(json, downgrade ? "downgrade_template_texture" : "upgrade_template_texture"));
     }
 
     /**
@@ -408,7 +416,7 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
         final Optional<ResourceLocation> downgradeTemplateModel = optionalResource(json, "downgrade_template_item_model");
         final Optional<ResourceLocation> upgradeTemplateTexture = optionalResource(json, "upgrade_template_texture");
         final Optional<ResourceLocation> downgradeTemplateTexture = optionalResource(json, "downgrade_template_texture");
-        return new TierDefinition(id, domain, schemaVersion, rarity, sortOrder, ingredient, downgrade, previousTier, Optional.of(source.getNamespace()), attributeMultipliers, curiosSetBonuses, compatAmplifiers, generatedDowngradeTemplate, generatedUpgradeTemplate, upgradeTemplateModel, downgradeTemplateModel, upgradeTemplateTexture, downgradeTemplateTexture);
+        return new TierDefinition(id, domain, schemaVersion, rarity, sortOrder, ingredient, downgrade, previousTier, Optional.of(source.getNamespace()), attributeMultipliers, curiosSetBonuses, compatAmplifiers, generatedUpgradeTemplate, generatedDowngradeTemplate, upgradeTemplateModel, downgradeTemplateModel, upgradeTemplateTexture, downgradeTemplateTexture);
     }
 
     private static Optional<ResourceLocation> optionalResource(final JsonObject json, final String key) {

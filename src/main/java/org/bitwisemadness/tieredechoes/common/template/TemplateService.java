@@ -15,11 +15,17 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Resolves which item belongs in the smithing template slot for a given tier.
+ *
+ * <p>Template declarations come from {@code tier_templates} datapack files and take precedence over
+ * the built-in items, so a datapack can swap the template for a tier without registering anything.</p>
+ */
 public final class TemplateService {
 	private static final TemplateService INSTANCE = new TemplateService();
 
-	/** template id -> declaration. */
-	private final Map<ResourceLocation, TemplateDefinition> declared = new LinkedHashMap<>();
+	/** (tier, downgrade) -> declaration. */
+	private final Map<TemplateKey, TemplateDefinition> declared = new LinkedHashMap<>();
 
 	private TemplateService() {
 	}
@@ -31,27 +37,27 @@ public final class TemplateService {
 	public synchronized void replaceAll(final Collection<TemplateDefinition> definitions) {
 		this.declared.clear();
 		for (final TemplateDefinition definition : definitions) {
-			this.declared.put(definition.id(), definition);
+			this.declared.put(new TemplateKey(definition.tier(), definition.downgrade()), definition);
 		}
 	}
 
-	public synchronized Optional<TemplateDefinition> template(final ResourceLocation templateId) {
-		return Optional.ofNullable(this.declared.get(templateId));
-	}
-
-	/** Returns the declaration matching this tier's upgrade or downgrade template, if any. */
 	public synchronized Optional<TemplateDefinition> template(final TierDefinition tier, final boolean downgrade) {
-		final String suffix = downgrade ? "_downgrade" : "_upgrade";
-		final ResourceLocation id = new ResourceLocation(TieredEchoes.MOD_ID, tier.id().getPath().toLowerCase(Locale.ROOT) + suffix);
-		return this.template(id);
+		return Optional.ofNullable(this.declared.get(new TemplateKey(tier.id(), downgrade)));
 	}
 
-	/** Every declaration currently in force, in insertion order. */
+	/**
+	 * Every declaration currently in force, in insertion order. Exposed so tooling — and the tests
+	 * that pin the one-template-per-tier contract — can see what a datapack actually contributed.
+	 */
 	public synchronized List<TemplateDefinition> declaredTemplates() {
 		return List.copyOf(this.declared.values());
 	}
 
-	/** The item the smithing table consumes in its template slot for this tier. */
+	/**
+	 * The item the smithing table consumes in its template slot for this tier. Datapack declarations
+	 * win; otherwise the built-in {@code <tier>_upgrade_template} / {@code <tier>_downgrade_template}
+	 * items are used when they happen to be registered.
+	 */
 	public synchronized Optional<Item> templateItem(final TierDefinition tier, final boolean downgrade) {
 		final Optional<ResourceLocation> declaredItem = this.template(tier, downgrade).flatMap(TemplateDefinition::item);
 		if (declaredItem.isPresent()) {
@@ -65,8 +71,10 @@ public final class TemplateService {
 		return item == null || item == Items.AIR ? Optional.empty() : Optional.of(item);
 	}
 
-	/** The id of the built-in template for this tier (upgrade or downgrade). */
 	public ResourceLocation templateId(final TierDefinition tier, final boolean downgrade) {
 		return new ResourceLocation(TieredEchoes.MOD_ID, tier.id().getPath().toLowerCase(Locale.ROOT) + (downgrade ? "_downgrade_template" : "_upgrade_template"));
+	}
+
+	private record TemplateKey(ResourceLocation tier, boolean downgrade) {
 	}
 }

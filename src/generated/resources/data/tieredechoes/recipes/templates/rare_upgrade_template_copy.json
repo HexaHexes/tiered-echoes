@@ -1,5 +1,23 @@
 {
-  "id": "tieredechoes:rare_upgrade_template",
-  "item": "tieredechoes:rare_upgrade_template",
-  "schema_version": 1
+  "type": "minecraft:crafting_shaped",
+  "key": {
+    "#": {
+      "item": "minecraft:diamond"
+    },
+    "C": {
+      "item": "minecraft:gold_ingot"
+    },
+    "S": {
+      "item": "tieredechoes:rare_upgrade_template"
+    }
+  },
+  "pattern": [
+    "#S#",
+    "#C#",
+    "###"
+  ],
+  "result": {
+    "count": 2,
+    "item": "tieredechoes:rare_upgrade_template"
+  }
 }
