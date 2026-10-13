@@ -29,14 +29,13 @@ public final class TestTiers {
         return new ResourceLocation(NAMESPACE, path);
     }
 
-    public static TierDefinition tier(final String path, final TierDomain domain, final int sortOrder, final int experienceRequired) {
+    public static TierDefinition tier(final String path, final TierDomain domain, final int sortOrder) {
         return new TierDefinition(
                 id(path),
                 domain,
                 1,
                 Rarity.COMMON,
                 sortOrder,
-                experienceRequired,
                 new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", "stick")),
                 Optional.empty(),
                 Optional.empty(),
@@ -46,6 +45,22 @@ public final class TestTiers {
                 Map.of(),
                 true,
                 true);
+    }
+
+    /**
+     * The rung, re-pointed at the named templates rather than at the conventional ones.
+     *
+     * <p>This is what a fork looks like when it is <em>not</em> self-selecting: two rungs naming one
+     * template offer the player no way to tell their branches apart at the table.</p>
+     */
+    public static TierDefinition naming(final TierDefinition tier, final ResourceLocation upgrade, final ResourceLocation downgrade) {
+        return new TierDefinition(
+                tier.id(), tier.domain(), tier.schemaVersion(), tier.displayRarity(), tier.sortOrder(),
+                tier.upgradeIngredient(), tier.downgradeIngredient(), tier.previousTier(), tier.sourcePack(),
+                tier.attributeMultipliers(), tier.curiosSetBonuses(), tier.compatAmplifiers(),
+                tier.generatedUpgradeTemplate(), tier.generatedDowngradeTemplate(),
+                Optional.of(upgrade), Optional.of(downgrade),
+                tier.upgradeTemplateTexture(), tier.downgradeTemplateTexture());
     }
 
     public static TierEdge edge(final String from, final String to, final TierDomain domain, final int registrationOrder,
@@ -59,8 +74,6 @@ public final class TestTiers {
                 addition,
                 downgradeTo,
                 Optional.of(NAMESPACE),
-                Optional.empty(),
-                Optional.empty(),
                 displayBranchId,
                 Map.of());
     }

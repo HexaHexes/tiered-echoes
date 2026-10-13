@@ -13,6 +13,7 @@ import net.minecraft.world.item.Rarity;
 import net.minecraft.world.item.crafting.RecipeManager;
 
 import javax.annotation.Nullable;
+import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.compat.apotheosis.ApotheosisCompatBridge;
 import org.bitwisemadness.tieredechoes.common.compat.arsnouveau.ArsNouveauCompatBridge;
 import org.bitwisemadness.tieredechoes.common.compat.ironsspells.IronsSpellsCompatBridge;
@@ -96,7 +97,7 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
         TierService.getInstance().replaceAll(data.tiers);
         PathService.getInstance().replaceAll(data.edges);
         TemplateService.getInstance().replaceAll(data.templates);
-        PolicyService.getInstance().replace(data.policy);
+        PolicyService.getInstance().replaceFromDatapack(data.policy);
         final ValidationReport combined = data.report;
         PathService.getInstance().validate(TierService.getInstance()).issues().forEach(combined::add);
         // Generated last so the recipes always reflect the path graph that was just applied.
@@ -107,8 +108,9 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
     }
 
     /**
-     * Loads {@code tier_templates} declarations. These name the item that occupies the smithing
-     * template slot for a tier, which is what lets a datapack add tiers without registering items.
+     * Loads {@code tier_templates} declarations. Each names the item that occupies the smithing
+     * template slot for whichever tier selects it, which is what lets a datapack add tiers — and
+     * give them a template of their own — without registering any items.
      */
     private static Collection<TemplateDefinition> loadTemplates(final ResourceManager manager, final ValidationReport report) {
         final List<TemplateDefinition> templates = new ArrayList<>();
@@ -126,28 +128,28 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
         return templates;
     }
 
+    /**
+     * Reads one {@code tier_templates} declaration.
+     *
+     * <p>There is no {@code tier} or {@code kind} field any more. A template is named rather than
+     * located: it is an entity of its own, a tier picks it out by id, and the direction it serves is
+     * whichever of the tier's two references names it. The keys an older file used — {@code tier},
+     * {@code kind}, and the per-direction {@code *_template_item_model} / {@code *_template_texture}
+     * overrides, which now live on the template itself — are simply not read. Those files still
+     * resolve, because the ids they were given were already {@code <tier>_<direction>_template}:
+     * exactly the id a tier looks up when it names nothing.</p>
+     */
     static TemplateDefinition parseTemplate(final ResourceLocation source, final JsonObject json) {
-        final String kind = GsonHelper.getAsString(json, "kind", "upgrade");
-        final boolean downgrade = switch (kind.toLowerCase(java.util.Locale.ROOT)) {
-            case "downgrade" -> true;
-            case "upgrade" -> false;
-            default -> throw new IllegalArgumentException("Unknown template kind \"" + kind + "\"; expected upgrade or downgrade");
-        };
-        // No domain field: a tier has one upgrade template and one downgrade template regardless of
-        // which item type carries the tier, and the template items were never domain-specific. A
-        // "domain" key left over from older data files is simply not read.
         return new TemplateDefinition(
                 new ResourceLocation(GsonHelper.getAsString(json, "id", source.toString())),
-                new ResourceLocation(GsonHelper.getAsString(json, "tier")),
-                downgrade,
                 optionalResource(json, "item"),
-                optionalResource(json, downgrade ? "downgrade_template_item_model" : "upgrade_template_item_model"),
-                optionalResource(json, downgrade ? "downgrade_template_texture" : "upgrade_template_texture"));
+                optionalResource(json, "item_model_override"),
+                optionalResource(json, "texture_override"));
     }
 
     /**
      * Loads {@code tier_policies} files, merging them onto the defaults. Fields a file does not
-     * mention keep their default, so a two-line datapack can flip a single rule.
+     * mention keep their default, so a two-line datapack can flip a single switch.
      */
     private static TierPolicy loadPolicy(final ResourceManager manager, final ValidationReport report) {
         TierPolicy policy = TierPolicy.defaults();
@@ -157,7 +159,7 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
                 if (!isCompatEligible(json)) {
                     continue;
                 }
-                policy = mergePolicy(policy, json);
+                policy = mergePolicy(policy, json, report);
             } catch (final Exception exception) {
                 report.add(new ValidationIssue(ValidationIssue.Severity.ERROR, "policy_parse_failure", "Failed to parse tier policy", Map.of("resource", entry.getKey().toString(), "error", String.valueOf(exception.getMessage()))));
             }
@@ -165,22 +167,65 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
         return policy;
     }
 
-    static TierPolicy mergePolicy(final TierPolicy base, final JsonObject json) {
-        final TierPolicy.Mode mode = json.has("mode")
-                ? TierPolicy.Mode.valueOf(GsonHelper.getAsString(json, "mode").toUpperCase(java.util.Locale.ROOT))
-                : base.mode();
-        final TierPolicy.MultiPathResolution resolution = json.has("multi_path_resolution")
-                ? TierPolicy.MultiPathResolution.valueOf(GsonHelper.getAsString(json, "multi_path_resolution").toUpperCase(java.util.Locale.ROOT))
-                : base.multiPathResolution();
-        final boolean carryOver = GsonHelper.getAsBoolean(json, "carry_over_excess_xp", base.carryOverExcessXp());
-        final boolean disableUpgradeRecipes = GsonHelper.getAsBoolean(json, "disable_upgrade_recipes", base.disableUpgradeRecipes());
-        // Boolean.valueOf rather than a bare ternary: without it the branch below widens to
-        // `boolean`, which unboxes base.consumeAttunementItem() and NPEs whenever a datapack file
-        // does not state the key — silently dropping that file's whole policy.
-        final Boolean consumeAttunement = json.has("consume_attunement_item")
-                ? Boolean.valueOf(GsonHelper.getAsBoolean(json, "consume_attunement_item"))
-                : base.consumeAttunementItem();
-        return new TierPolicy(mode, resolution, carryOver, disableUpgradeRecipes, consumeAttunement);
+    /**
+     * Merges one {@code tier_policies} file onto the running answer.
+     *
+     * <p>Five booleans is the whole shape now. The fields that used to live here answered
+     * questions the mod no longer asks — which routes are open collapses onto the switches, and the
+     * rest described how accumulated experience should behave — so rather than carry them forward
+     * as inert data they are recognised, mapped where a mapping exists, and reported.</p>
+     *
+     * <p>A superseded key is warned about whether or not its modern replacement is also present, so
+     * a pack mid-migration hears about the key it still has to delete rather than only about the one
+     * it has not added yet. Where both appear in one file the modern key governs: adding the new
+     * key should take effect before the old one is gone, not after.</p>
+     */
+    static TierPolicy mergePolicy(final TierPolicy base, final JsonObject json, final ValidationReport report) {
+        boolean tierSystem = GsonHelper.getAsBoolean(json, "tier_system", base.tierSystem());
+        boolean tierUpgrades = GsonHelper.getAsBoolean(json, "tier_upgrades", base.tierUpgrades());
+
+        // Kept as a named alias rather than dropped outright: it was the one legacy key a pack had a
+        // reason to set, and its meaning is the same switch turned around.
+        if (json.has("disable_upgrade_recipes")) {
+            warnSuperseded(report, "disable_upgrade_recipes", "tier_upgrades");
+            if (!json.has("tier_upgrades")) {
+                tierUpgrades = !GsonHelper.getAsBoolean(json, "disable_upgrade_recipes");
+            }
+        }
+        if (json.has("mode")) {
+            warnSuperseded(report, "mode", "tier_system / tier_upgrades");
+            // AUTO_ONLY was the only mode that changed behaviour a switch does not describe: it
+            // closed the smithing route entirely and let experience drive progression. Experience
+            // no longer drives anything, so the surviving half of that intent is "no upgrades".
+            if (!json.has("tier_upgrades") && "AUTO_ONLY".equalsIgnoreCase(GsonHelper.getAsString(json, "mode"))) {
+                tierUpgrades = false;
+            }
+            // HYBRID and SMITHING_ONLY both meant "the smithing route is open", which is the default.
+        }
+        for (final String ignored : List.of("multi_path_resolution", "carry_over_excess_xp", "consume_attunement_item")) {
+            if (json.has(ignored)) {
+                warnIgnored(report, ignored);
+            }
+        }
+
+        return new TierPolicy(
+                tierSystem,
+                tierUpgrades,
+                GsonHelper.getAsBoolean(json, "levelling_system", base.levellingSystem()),
+                GsonHelper.getAsBoolean(json, "level_up", base.levelUp()),
+                GsonHelper.getAsBoolean(json, "downgrades", base.downgrades()));
+    }
+
+    private static void warnSuperseded(final ValidationReport report, final String key, final String replacement) {
+        report.add(new ValidationIssue(ValidationIssue.Severity.WARNING, "superseded_policy_field",
+                "'" + key + "' is no longer read; use '" + replacement + "' instead.",
+                Map.of("field", key, "replacement", replacement)));
+    }
+
+    private static void warnIgnored(final ValidationReport report, final String key) {
+        report.add(new ValidationIssue(ValidationIssue.Severity.WARNING, "obsolete_policy_field",
+                "'" + key + "' described how accumulated item experience behaved, and is parsed only so the file keeps loading.",
+                Map.of("field", key)));
     }
 
     static List<TierDefinition> deduplicateTiers(final List<TierDefinition> tiers, final ValidationReport report) {
@@ -264,7 +309,7 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
                     if (domain == null) {
                         continue;
                     }
-                    edges.add(parseEdge(edge, domain, order++, entry.getKey().toString()));
+                    edges.add(parseEdge(edge, domain, order++, entry.getKey().toString(), report));
                 }
             } catch (final Exception exception) {
                 report.add(new ValidationIssue(ValidationIssue.Severity.ERROR, "path_parse_failure", "Failed to parse tier path", Map.of("resource", entry.getKey().toString(), "error", String.valueOf(exception.getMessage()))));
@@ -355,7 +400,11 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
         // extension that creates it succeeded.
         final Rarity rarity = TERarities.byName(GsonHelper.getAsString(json, "display_rarity", "COMMON"), Rarity.COMMON);
         final int sortOrder = GsonHelper.getAsInt(json, "sort_order", 0);
-        final int xp = GsonHelper.getAsInt(json, "experience_required", 0);
+        if (json.has("experience_required")) {
+            // Warned about rather than read: an item no longer earns anything by being used, so a
+            // threshold here would gate a transition nothing can reach.
+            TieredEchoes.LOGGER.warn("[TieredEchoes] {} declares 'experience_required', which was removed: items no longer earn experience toward a tier.", source);
+        }
         final IngredientMatcher ingredient = parseIngredient(GsonHelper.getAsJsonObject(json, "upgrade_ingredient"));
         final Optional<IngredientMatcher> downgrade = json.has("downgrade_ingredient") ? Optional.of(parseIngredient(GsonHelper.getAsJsonObject(json, "downgrade_ingredient"))) : Optional.empty();
         final Optional<ResourceLocation> previousTier = json.has("previous_tier") ? Optional.of(new ResourceLocation(GsonHelper.getAsString(json, "previous_tier"))) : Optional.empty();
@@ -364,34 +413,36 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
         final Map<String, Double> compatAmplifiers = parseDoubleMap(json.getAsJsonObject("compat_amplifiers"));
         final boolean generatedUpgradeTemplate = GsonHelper.getAsBoolean(json, "generated_upgrade_template", true);
         final boolean generatedDowngradeTemplate = GsonHelper.getAsBoolean(json, "generated_downgrade_template", true);
-        final Optional<ResourceLocation> upgradeTemplateModel = optionalResource(json, "upgrade_template_item_model");
-        final Optional<ResourceLocation> downgradeTemplateModel = optionalResource(json, "downgrade_template_item_model");
+        // Which template this rung names for each direction, by template id. Left unset — as the
+        // shipped ladder leaves it — the conventional <tier>_upgrade_template / <tier>_downgrade_template
+        // item is spent instead, so declaring nothing still resolves.
+        final Optional<ResourceLocation> upgradeTemplate = optionalResource(json, "upgrade_template");
+        final Optional<ResourceLocation> downgradeTemplate = optionalResource(json, "downgrade_template");
         final Optional<ResourceLocation> upgradeTemplateTexture = optionalResource(json, "upgrade_template_texture");
         final Optional<ResourceLocation> downgradeTemplateTexture = optionalResource(json, "downgrade_template_texture");
-        return new TierDefinition(id, domain, schemaVersion, rarity, sortOrder, xp, ingredient, downgrade, previousTier, Optional.of(source.getNamespace()), attributeMultipliers, curiosSetBonuses, compatAmplifiers, generatedDowngradeTemplate, generatedUpgradeTemplate, upgradeTemplateModel, downgradeTemplateModel, upgradeTemplateTexture, downgradeTemplateTexture);
+        return new TierDefinition(id, domain, schemaVersion, rarity, sortOrder, ingredient, downgrade, previousTier, Optional.of(source.getNamespace()), attributeMultipliers, curiosSetBonuses, compatAmplifiers, generatedUpgradeTemplate, generatedDowngradeTemplate, upgradeTemplate, downgradeTemplate, upgradeTemplateTexture, downgradeTemplateTexture);
     }
 
     private static Optional<ResourceLocation> optionalResource(final JsonObject json, final String key) {
         return json.has(key) ? Optional.of(new ResourceLocation(GsonHelper.getAsString(json, key))) : Optional.empty();
     }
 
-    static TierEdge parseEdge(final JsonObject json, final TierDomain domain, final int registrationOrder, final String sourcePack) {
+    static TierEdge parseEdge(final JsonObject json, final TierDomain domain, final int registrationOrder,
+                              final String sourcePack, final ValidationReport report) {
         final ResourceLocation from = new ResourceLocation(GsonHelper.getAsString(json, "from"));
         final ResourceLocation to = new ResourceLocation(GsonHelper.getAsString(json, "to"));
-        // This field feeds both the smithing recipe's addition slot and branch attunement, so it is
-        // spelled "addition" to match the recipe vocabulary; "attunement_ingredient" is the older
-        // spelling and still works so existing datapacks keep loading unchanged.
-        final Optional<IngredientMatcher> attunement = json.has("addition")
+        if (json.has("attunement_ingredient")) {
+            report.add(new ValidationIssue(ValidationIssue.Severity.WARNING, "removed_policy_field",
+                    "'attunement_ingredient' was removed with attunement; the smithing addition is now spelled 'addition' and is read from that key alone.",
+                    Map.of("field", "attunement_ingredient", "replacement", "addition")));
+        }
+        final Optional<IngredientMatcher> addition = json.has("addition")
                 ? Optional.of(parseIngredient(GsonHelper.getAsJsonObject(json, "addition")))
-                : json.has("attunement_ingredient")
-                ? Optional.of(parseIngredient(GsonHelper.getAsJsonObject(json, "attunement_ingredient")))
                 : Optional.empty();
         final Optional<ResourceLocation> downgradeTo = json.has("downgrade_to") ? Optional.of(new ResourceLocation(GsonHelper.getAsString(json, "downgrade_to"))) : Optional.empty();
-        final Optional<Integer> xpOverride = json.has("experience_required") ? Optional.of(GsonHelper.getAsInt(json, "experience_required")) : Optional.empty();
-        final Optional<IngredientMatcher> ingredientOverride = json.has("upgrade_ingredient_override") ? Optional.of(parseIngredient(GsonHelper.getAsJsonObject(json, "upgrade_ingredient_override"))) : Optional.empty();
         final Optional<String> displayBranchId = Optional.ofNullable(GsonHelper.getAsString(json, "display_branch_id", DisplayBranchResolver.branchId(from, to, registrationOrder)));
         final Map<String, Double> compatAmplifiers = parseDoubleMap(json.getAsJsonObject("compat_amplifiers"));
-        return new TierEdge(from, to, domain, registrationOrder, attunement, downgradeTo, Optional.ofNullable(sourcePack), xpOverride, ingredientOverride, displayBranchId, compatAmplifiers);
+        return new TierEdge(from, to, domain, registrationOrder, addition, downgradeTo, Optional.ofNullable(sourcePack), displayBranchId, compatAmplifiers);
     }
 
     private static Map<String, Double> parseDoubleMap(final JsonObject json) {

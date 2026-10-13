@@ -24,9 +24,9 @@ class DisplayBranchResolverTest {
     }
 
     /**
-     * Branch ids are written onto items as {@code last_branch_id} and compared across sessions, so
-     * a registration-order change re-using an id would silently carry a player's attunement onto a
-     * different edge.
+     * Branch ids are what two edges are told apart by — validation reports a clash on them and
+     * tooltips quote them — so a registration-order change re-using an id would make one route
+     * indistinguishable from another across sessions.
      */
     @Test
     void separatesRegistrationOrders() {

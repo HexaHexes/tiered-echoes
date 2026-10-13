@@ -39,7 +39,7 @@ class TieredEchoesDataReloaderTest {
     }
 
     private static TierDefinition weapon(final String path) {
-        return TestTiers.tier(path, TierDomain.WEAPON, 0, 0);
+        return TestTiers.tier(path, TierDomain.WEAPON, 0);
     }
 
     /**
@@ -56,8 +56,6 @@ class TieredEchoesDataReloaderTest {
                 Optional.empty(),
                 Optional.of(new ResourceLocation("tieredechoes", from)),
                 Optional.of(sourcePack),
-                Optional.empty(),
-                Optional.empty(),
                 Optional.of(displayBranchId),
                 Map.of());
     }
@@ -65,12 +63,13 @@ class TieredEchoesDataReloaderTest {
     // ---------------------------------------------------------------- templates
 
     /**
-     * The template files were collapsed to one upgrade and one downgrade per tier. A datapack
-     * written against the older per-domain layout still carries a {@code domain} key, and reading it
-     * back as an error would break every one of those packs for no benefit.
+     * A template is named rather than located, so a file written against the older layout — which
+     * said which tier and direction it belonged to — still parses and still resolves. Its id was
+     * already the name a tier looks up by convention, which is what keeps those packs working
+     * without a migration step.
      */
     @Test
-    void templateParsingIgnoresALegacyDomainKey() {
+    void templateParsingIgnoresTheKeysTheStandaloneFormatDropped() {
         final TemplateDefinition template = TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
                 {
                   "id": "tieredechoes:rare_upgrade_template",
@@ -81,37 +80,47 @@ class TieredEchoesDataReloaderTest {
                 }
                 """));
 
-        assertEquals(new ResourceLocation("tieredechoes", "rare"), template.tier());
-        assertFalse(template.downgrade());
+        assertEquals(new ResourceLocation("tieredechoes", "rare_upgrade_template"), template.id());
         assertEquals(Optional.of(new ResourceLocation("tieredechoes", "rare_upgrade_template")), template.item());
-    }
-
-    @Test
-    void templateKindDefaultsToUpgradeAndAcceptsBothSpellingsCaseInsensitively() {
-        final TemplateDefinition implicit = TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
-                {"tier":"tieredechoes:common"}
-                """));
-        final TemplateDefinition shouted = TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
-                {"tier":"tieredechoes:common","kind":"DOWNGRADE"}
-                """));
-
-        assertFalse(implicit.downgrade());
-        assertTrue(shouted.downgrade());
+        assertTrue(template.itemModelOverride().isEmpty());
+        assertTrue(template.textureOverride().isEmpty());
     }
 
     @Test
     void templateIdFallsBackToTheResourceItCameFrom() {
         final TemplateDefinition template = TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
-                {"tier":"tieredechoes:common"}
+                {}
                 """));
 
         assertEquals(SOURCE, template.id());
     }
 
+    /** The overrides belong to the template now, whatever direction any tier spends it in. */
     @Test
-    void templateKindIsAllowedToBeWrongOnlyIfItIsRejectedLoudly() {
-        assertThrows(IllegalArgumentException.class, () -> TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
-                {"tier":"tieredechoes:common","kind":"sideways"}
+    void templateParsingReadsTheOverridesItSupports() {
+        final TemplateDefinition template = TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
+                {
+                  "id": "tieredechoes:magic_upgrade_template",
+                  "item": "minecraft:nether_star",
+                  "item_model_override": "tieredechoes:models/item/magic_template",
+                  "texture_override": "tieredechoes:textures/item/magic_template"
+                }
+                """));
+
+        assertEquals(Optional.of(new ResourceLocation("tieredechoes", "models/item/magic_template")),
+                template.itemModelOverride());
+        assertEquals(Optional.of(new ResourceLocation("tieredechoes", "textures/item/magic_template")),
+                template.textureOverride());
+    }
+
+    /**
+     * Everything else about the shape is optional, so the id is the one thing a file can get wrong
+     * in a way that has no answer to fall back on.
+     */
+    @Test
+    void templateParsingRejectsAnIdThatIsNotAResourceLocation() {
+        assertThrows(RuntimeException.class, () -> TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
+                {"id":"rare upgrade template"}
                 """)));
     }
 
@@ -125,47 +134,50 @@ class TieredEchoesDataReloaderTest {
                   "to": "tieredechoes:uncommon",
                   "addition": {"item":"minecraft:iron_ingot"},
                   "downgrade_to": "tieredechoes:common",
-                  "experience_required": 40,
-                  "upgrade_ingredient_override": {"tag":"minecraft:ingots"},
                   "display_branch_id": "my_branch",
                   "compat_amplifiers": {"apotheosis:affix": 2.0}
                 }
-                """), TierDomain.WEAPON, 42, "testpack");
+                """), TierDomain.WEAPON, 42, "testpack", new ValidationReport());
 
         assertEquals(new ResourceLocation("tieredechoes", "common"), edge.from());
         assertEquals(new ResourceLocation("tieredechoes", "uncommon"), edge.to());
         assertEquals(TierDomain.WEAPON, edge.domain());
         assertEquals(42, edge.registrationOrder());
-        assertEquals(IngredientMatcher.Kind.ITEM, edge.attunementIngredient().orElseThrow().kind());
+        assertEquals(IngredientMatcher.Kind.ITEM, edge.additionIngredient().orElseThrow().kind());
         assertEquals(Optional.of(new ResourceLocation("tieredechoes", "common")), edge.downgradeTo());
-        assertEquals(Optional.of(40), edge.experienceRequirementOverride());
-        assertEquals(IngredientMatcher.Kind.TAG, edge.upgradeIngredientOverride().orElseThrow().kind());
         assertEquals(Optional.of("my_branch"), edge.displayBranchId());
         assertEquals(2.0D, edge.compatAmplifiers().get("apotheosis:affix"));
         assertEquals(Optional.of("testpack"), edge.sourcePack());
     }
 
-    /** {@code addition} is the recipe vocabulary; {@code attunement_ingredient} predates it. */
+    /**
+     * {@code attunement_ingredient} spelled the smithing addition before attunement was removed.
+     *
+     * <p>Read as a warning rather than silently dropped: a pack still carrying the old key would
+     * otherwise publish recipes with an empty addition slot and give no clue why. It is not read as
+     * an alias either — accepting both spellings forever is how a schema stops being able to
+     * change.</p>
+     */
     @Test
-    void bothAttunementIngredientSpellingsProduceTheSameEdge() {
-        final JsonObject modern = json("""
-                {"from":"tieredechoes:common","to":"tieredechoes:uncommon","addition":{"item":"minecraft:iron_ingot"}}
-                """);
-        final JsonObject legacy = json("""
+    void theRemovedAttunementIngredientKeyIsReportedRatherThanReadAsAnAlias() {
+        final ValidationReport report = new ValidationReport();
+
+        final TierEdge edge = TieredEchoesDataReloader.parseEdge(json("""
                 {"from":"tieredechoes:common","to":"tieredechoes:uncommon","attunement_ingredient":{"item":"minecraft:iron_ingot"}}
-                """);
+                """), TierDomain.WEAPON, 1, "testpack", report);
 
-        final TierEdge fromModern = TieredEchoesDataReloader.parseEdge(modern, TierDomain.WEAPON, 1, "testpack");
-        final TierEdge fromLegacy = TieredEchoesDataReloader.parseEdge(legacy, TierDomain.WEAPON, 1, "testpack");
-
-        assertEquals(fromModern.attunementIngredient(), fromLegacy.attunementIngredient());
+        assertTrue(edge.additionIngredient().isEmpty(),
+                "the removed key must not be read back under a name it never had");
+        assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("removed_policy_field")),
+                "a pack still using the old spelling should be told what to change");
+        assertEquals(0, report.errorCount(), "a stale key should not stop the datapack loading");
     }
 
     @Test
     void aBranchWithNoExplicitNameGetsADerivedOne() {
         final TierEdge edge = TieredEchoesDataReloader.parseEdge(json("""
                 {"from":"tieredechoes:common","to":"tieredechoes:uncommon"}
-                """), TierDomain.WEAPON, 7, "testpack");
+                """), TierDomain.WEAPON, 7, "testpack", new ValidationReport());
 
         assertTrue(edge.displayBranchId().isPresent());
         assertFalse(edge.displayBranchId().orElseThrow().isBlank());
@@ -201,7 +213,7 @@ class TieredEchoesDataReloaderTest {
                 json("""
                         {"from":"test:alpha","to":"test:beta"}
                         """),
-                Optional.empty(), List.of(TestTiers.tier("alpha", TierDomain.ARMOR, 0, 0)),
+                Optional.empty(), List.of(TestTiers.tier("alpha", TierDomain.ARMOR, 0)),
                 new ValidationReport(), SOURCE, 1);
 
         assertEquals(TierDomain.ARMOR, resolved);
@@ -215,8 +227,8 @@ class TieredEchoesDataReloaderTest {
                         {"from":"test:alpha","to":"test:beta"}
                         """),
                 Optional.empty(),
-                List.of(TestTiers.tier("alpha", TierDomain.ARMOR, 0, 0),
-                        TestTiers.tier("alpha", TierDomain.WEAPON, 0, 0)),
+                List.of(TestTiers.tier("alpha", TierDomain.ARMOR, 0),
+                        TestTiers.tier("alpha", TierDomain.WEAPON, 0)),
                 report, SOURCE, 1);
 
         assertNull(resolved);
@@ -263,45 +275,114 @@ class TieredEchoesDataReloaderTest {
 
     @Test
     void aPartialPolicyMergesOntoTheDefaults() {
-        final TierPolicy merged = TieredEchoesDataReloader.mergePolicy(TierPolicy.defaults(), json("""
-                {"mode":"auto_only","carry_over_excess_xp":false}
-                """));
+        final ValidationReport report = new ValidationReport();
 
-        assertEquals(TierPolicy.Mode.AUTO_ONLY, merged.mode());
-        assertFalse(merged.carryOverExcessXp());
-        assertEquals(TierPolicy.MultiPathResolution.RANDOM, merged.multiPathResolution());
-        assertFalse(merged.disableUpgradeRecipes());
+        final TierPolicy merged = TieredEchoesDataReloader.mergePolicy(TierPolicy.defaults(), json("""
+                {"tier_upgrades":false}
+                """), report);
+
+        assertFalse(merged.tierUpgrades(), "the stated switch must be adopted");
+        assertTrue(merged.tierSystem(), "the unstated ones must keep the default");
+        assertTrue(merged.levellingSystem());
+        assertTrue(merged.levelUp());
+        assertFalse(merged.downgrades(), "the way down defaults off, and this file did not say otherwise");
+        assertEquals(0, report.issues().size(), "a modern policy file should produce no findings");
+    }
+
+    /** The legacy key keeps meaning what it meant, so an old pack still closes the route. */
+    @Test
+    void disableUpgradeRecipesStillClosesTheRouteButIsReportedAsSuperseded() {
+        final ValidationReport report = new ValidationReport();
+
+        final TierPolicy merged = TieredEchoesDataReloader.mergePolicy(TierPolicy.defaults(), json("""
+                {"disable_upgrade_recipes":true}
+                """), report);
+
+        assertFalse(merged.tierUpgrades(), "the alias must keep its old meaning");
+        assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("superseded_policy_field")),
+                "the pack should be told which key replaces it");
+        assertEquals(0, report.errorCount(), "an alias is a migration, not a failure");
+    }
+
+    /** AUTO_ONLY used to hand progression to experience, which no longer drives anything. */
+    @Test
+    void autoOnlyStillClosesSmithingEvenThoughExperienceNoLongerDrivesProgression() {
+        final ValidationReport report = new ValidationReport();
+
+        final TierPolicy merged = TieredEchoesDataReloader.mergePolicy(TierPolicy.defaults(), json("""
+                {"mode":"AUTO_ONLY"}
+                """), report);
+
+        assertFalse(merged.tierUpgrades(),
+                "the surviving half of AUTO_ONLY's intent is that the smithing route is shut");
+        assertTrue(merged.tierSystem(), "the mode never claimed tiers should not exist");
+        assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("superseded_policy_field")));
+    }
+
+    /** HYBRID and SMITHING_ONLY both meant the smithing route is open, which is already the default. */
+    @Test
+    void theModesThatKeptSmithingOpenLeaveItOpen() {
+        for (final String mode : List.of("SMITHING_ONLY", "HYBRID")) {
+            final TierPolicy merged = TieredEchoesDataReloader.mergePolicy(TierPolicy.defaults(), json("""
+                    {"mode":"%s"}
+                    """.formatted(mode)), new ValidationReport());
+
+            assertTrue(merged.tierUpgrades(), mode + " never meant the route was closed");
+        }
+    }
+
+    /**
+     * Adding the new key takes effect before the old one is deleted, not after — otherwise a pack
+     * mid-migration would find its new declaration ignored by a key it is about to remove.
+     */
+    @Test
+    void theModernKeyGovernsWhenBothSpellingsAppearInOneFile() {
+        final ValidationReport report = new ValidationReport();
+
+        final TierPolicy merged = TieredEchoesDataReloader.mergePolicy(TierPolicy.defaults(), json("""
+                {"tier_upgrades":true,"disable_upgrade_recipes":true}
+                """), report);
+
+        assertTrue(merged.tierUpgrades(), "the modern key must win");
+        assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("superseded_policy_field")),
+                "the stale key must still be reported, or it would never be deleted");
     }
 
     @Test
-    void policyEnumsAreCaseInsensitiveSoYamlHabitsDoNotBreakParsing() {
-        final TierPolicy merged = TieredEchoesDataReloader.mergePolicy(TierPolicy.defaults(), json("""
-                {"mode":"Smithing_Only","multi_path_resolution":"first"}
-                """));
+    void fieldsThatDescribedItemExperienceAreIgnoredRatherThanFatal() {
+        for (final String key : List.of("multi_path_resolution", "carry_over_excess_xp", "consume_attunement_item")) {
+            final ValidationReport report = new ValidationReport();
 
-        assertEquals(TierPolicy.Mode.SMITHING_ONLY, merged.mode());
-        assertEquals(TierPolicy.MultiPathResolution.FIRST, merged.multiPathResolution());
+            final TierPolicy merged = TieredEchoesDataReloader.mergePolicy(TierPolicy.defaults(), json("""
+                    {"%s":false}
+                    """.formatted(key)), report);
+
+            assertEquals(TierPolicy.defaults(), merged,
+                    key + " should be parsed for compatibility and then dropped");
+            assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("obsolete_policy_field")),
+                    key + " should be reported as obsolete");
+        }
     }
 
+    /**
+     * {@code mode} used to be an enum with an {@code IllegalArgumentException} waiting for a typo.
+     *
+     * <p>It is now an inert legacy key, so an unrecognised value has nothing to collide with — and
+     * that is the point of removing the enum rather than growing it. The file still loads, and the
+     * key is still reported.</p>
+     */
     @Test
-    void anExplicitFalseOnAttunementConsumptionSurvivesTheMerge() {
+    void anUnrecognisedLegacyModeDoesNotStopTheFileLoading() {
+        final ValidationReport report = new ValidationReport();
+
         final TierPolicy merged = TieredEchoesDataReloader.mergePolicy(TierPolicy.defaults(), json("""
-                {"consume_attunement_item":false}
-                """));
+                {"mode":"sideways"}
+                """), report);
 
-        assertEquals(Boolean.FALSE, merged.consumeAttunementItem());
-
-        final TierPolicy untouched = TieredEchoesDataReloader.mergePolicy(TierPolicy.defaults(), json("{}"));
-
-        assertNull(untouched.consumeAttunementItem(), "an absent key must stay absent");
-    }
-
-    @Test
-    void anUnknownPolicyEnumFailsLoudlyInsteadOfSilentlyDefaulting() {
-        assertThrows(IllegalArgumentException.class, () -> TieredEchoesDataReloader.mergePolicy(
-                TierPolicy.defaults(), json("""
-                        {"mode":"sideways"}
-                        """)));
+        assertEquals(TierPolicy.defaults(), merged, "an unrecognised mode has no mapping to make");
+        assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("superseded_policy_field")),
+                "the key should still be reported as superseded");
+        assertEquals(0, report.errorCount(), "a legacy typo must not be an error");
     }
 
     // ---------------------------------------------------------------- de-duplication
@@ -316,12 +397,12 @@ class TieredEchoesDataReloaderTest {
 
         final List<TierDefinition> merged = TieredEchoesDataReloader.deduplicateTiers(
                 List.of(
-                        TestTiers.tier("epic", TierDomain.WEAPON, 3, 0),
-                        TestTiers.tier("common", TierDomain.ARMOR, 0, 0),
-                        TestTiers.tier("rare", TierDomain.WEAPON, 2, 0),
-                        TestTiers.tier("uncommon", TierDomain.WEAPON, 1, 0),
-                        TestTiers.tier("epic", TierDomain.ARMOR, 3, 0),
-                        TestTiers.tier("common", TierDomain.WEAPON, 0, 0)),
+                        TestTiers.tier("epic", TierDomain.WEAPON, 3),
+                        TestTiers.tier("common", TierDomain.ARMOR, 0),
+                        TestTiers.tier("rare", TierDomain.WEAPON, 2),
+                        TestTiers.tier("uncommon", TierDomain.WEAPON, 1),
+                        TestTiers.tier("epic", TierDomain.ARMOR, 3),
+                        TestTiers.tier("common", TierDomain.WEAPON, 0)),
                 report);
 
         assertEquals(
@@ -336,21 +417,23 @@ class TieredEchoesDataReloaderTest {
     @Test
     void twoDatapacksFightingOverTheSameIdWarn() {
         final ValidationReport report = new ValidationReport();
-        final TierDefinition first = TestTiers.tier("common", TierDomain.WEAPON, 0, 10);
-        final TierDefinition second = TestTiers.tier("common", TierDomain.WEAPON, 0, 20);
+        final TierDefinition first = TestTiers.tier("common", TierDomain.WEAPON, 0);
+        // Marked with its own pack so "the later one wins" can be observed on a field that differs;
+        // two records identical in every field would say nothing about which one survived.
+        final TierDefinition second = TestTiers.tier("common", TierDomain.WEAPON, 0).withSourcePack("secondpack");
 
         final List<TierDefinition> merged = TieredEchoesDataReloader.deduplicateTiers(
                 List.of(first, second), report);
 
         assertEquals(1, merged.size());
-        assertEquals(20, merged.get(0).experienceRequired(), "the later declaration wins");
+        assertEquals(Optional.of("secondpack"), merged.get(0).sourcePack(), "the later declaration wins");
         assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("duplicate_tier_definition")));
     }
 
     @Test
     void identicalDuplicateTiersAreNotReportedAsAClash() {
         final ValidationReport report = new ValidationReport();
-        final TierDefinition tier = TestTiers.tier("common", TierDomain.WEAPON, 0, 10);
+        final TierDefinition tier = TestTiers.tier("common", TierDomain.WEAPON, 0);
 
         TieredEchoesDataReloader.deduplicateTiers(List.of(tier, tier), report);
 
@@ -376,7 +459,7 @@ class TieredEchoesDataReloaderTest {
         assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("duplicate_tier_path")));
     }
 
-    /** Branch ids are stored on items, so two edges claiming one would make attunement ambiguous. */
+    /** Branch ids are how two routes out of one tier are told apart, so a duplicate is a real clash. */
     @Test
     void twoEdgesSharingADisplayBranchIdWouldBeReportedByValidationRatherThanHere() {
         final ValidationReport report = new ValidationReport();
@@ -425,7 +508,6 @@ class TieredEchoesDataReloaderTest {
                   "schema_version":4,
                   "display_rarity":"RARE",
                   "sort_order":2,
-                  "experience_required":75,
                   "upgrade_ingredient":{"item":"minecraft:diamond"},
                   "downgrade_ingredient":{"tag":"minecraft:ingots"},
                   "previous_tier":"test:beta",
@@ -434,7 +516,8 @@ class TieredEchoesDataReloaderTest {
                   "compat_amplifiers":{"apotheosis:affix":2.0},
                   "generated_upgrade_template":false,
                   "generated_downgrade_template":true,
-                  "upgrade_template_item_model":"tieredechoes:models/item/x",
+                  "upgrade_template":"test:magic_upgrade_template",
+                  "downgrade_template":"test:magic_downgrade_template",
                   "downgrade_template_texture":"tieredechoes:textures/item/y"
                 }
                 """));
@@ -444,7 +527,6 @@ class TieredEchoesDataReloaderTest {
         assertEquals(4, tier.schemaVersion());
         assertEquals(net.minecraft.world.item.Rarity.RARE, tier.displayRarity());
         assertEquals(2, tier.sortOrder());
-        assertEquals(75, tier.experienceRequired());
         assertEquals(IngredientMatcher.Kind.ITEM, tier.upgradeIngredient().kind());
         assertEquals(IngredientMatcher.Kind.TAG, tier.downgradeIngredient().orElseThrow().kind());
         assertEquals(Optional.of(TestTiers.id("beta")), tier.previousTier());
@@ -453,7 +535,9 @@ class TieredEchoesDataReloaderTest {
         assertEquals(2.0D, tier.compatAmplifiers().get("apotheosis:affix"));
         assertFalse(tier.generatedUpgradeTemplate());
         assertTrue(tier.generatedDowngradeTemplate());
-        assertTrue(tier.upgradeTemplateItemModel().isPresent());
+        assertEquals(Optional.of(new ResourceLocation("test", "magic_upgrade_template")), tier.upgradeTemplateId(),
+                "the key names a template, by template id");
+        assertEquals(Optional.of(new ResourceLocation("test", "magic_downgrade_template")), tier.downgradeTemplateId());
         assertTrue(tier.downgradeTemplateTexture().isPresent());
         assertEquals(Optional.of("testpack"), tier.sourcePack());
     }
@@ -467,12 +551,13 @@ class TieredEchoesDataReloaderTest {
         assertEquals(1, tier.schemaVersion());
         assertEquals(net.minecraft.world.item.Rarity.COMMON, tier.displayRarity());
         assertEquals(0, tier.sortOrder());
-        assertEquals(0, tier.experienceRequired());
         assertTrue(tier.downgradeIngredient().isEmpty());
         assertTrue(tier.previousTier().isEmpty());
         assertTrue(tier.attributeMultipliers().isEmpty());
         assertTrue(tier.generatedUpgradeTemplate());
         assertTrue(tier.generatedDowngradeTemplate());
+        assertTrue(tier.upgradeTemplateId().isEmpty(), "naming no template means spending the conventional one");
+        assertTrue(tier.downgradeTemplateId().isEmpty());
     }
 
     @Test

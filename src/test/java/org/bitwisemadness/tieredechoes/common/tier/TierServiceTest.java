@@ -59,8 +59,8 @@ class TierServiceTest {
     @Test
     void tierIdsAreResolvedWithinADomainRatherThanGlobally() {
         this.service.replaceAll(List.of(
-                TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
-                TestTiers.tier("common", TierDomain.ARMOR, 0, 0)));
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.tier("common", TierDomain.ARMOR, 0)));
 
         final Optional<TierDefinition> weapon = this.service.getTier(TestTiers.id("common"), TierDomain.WEAPON);
         final Optional<TierDefinition> armor = this.service.getTier(TestTiers.id("common"), TierDomain.ARMOR);
@@ -74,15 +74,15 @@ class TierServiceTest {
     @Test
     void unscopedLookupRefusesToGuessWhenTheIdIsAmbiguous() {
         this.service.replaceAll(List.of(
-                TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
-                TestTiers.tier("common", TierDomain.ARMOR, 0, 0)));
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.tier("common", TierDomain.ARMOR, 0)));
 
         assertEquals(Optional.empty(), this.service.getTier(TestTiers.id("common")));
     }
 
     @Test
     void unscopedLookupStillWorksWhenOnlyOneDomainDeclaresTheId() {
-        this.service.replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0, 0)));
+        this.service.replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0)));
 
         assertEquals(TierDomain.WEAPON, this.service.getTier(TestTiers.id("common")).orElseThrow().domain());
     }
@@ -90,9 +90,9 @@ class TierServiceTest {
     @Test
     void orderedTiersAreSortedBySortOrderNotFileOrder() {
         this.service.replaceAll(List.of(
-                TestTiers.tier("epic", TierDomain.WEAPON, 3, 150),
-                TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
-                TestTiers.tier("rare", TierDomain.WEAPON, 2, 75)));
+                TestTiers.tier("epic", TierDomain.WEAPON, 3),
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.tier("rare", TierDomain.WEAPON, 2)));
 
         final List<TierDefinition> ordered = this.service.getOrderedTiers(TierDomain.WEAPON);
 
@@ -109,8 +109,8 @@ class TierServiceTest {
     @Test
     void storedTierIsReadBackWithItsDomain() {
         this.service.replaceAll(List.of(
-                TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
-                TestTiers.tier("common", TierDomain.ARMOR, 0, 0)));
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.tier("common", TierDomain.ARMOR, 0)));
         final ItemStack stack = new ItemStack(Items.LEATHER_CHESTPLATE);
         final CompoundTag te = stack.getOrCreateTagElement("TieredEchoes");
         final CompoundTag domains = new CompoundTag();
@@ -129,8 +129,8 @@ class TierServiceTest {
     @Test
     void twoLaddersOnOneItemAreStoredAndReadBackIndependently() {
         this.service.replaceAll(List.of(
-                TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
-                TestTiers.tier("common", TierDomain.TOOL, 0, 0)));
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.tier("common", TierDomain.TOOL, 0)));
         final ItemStack stack = new ItemStack(Items.IRON_AXE);
         final CompoundTag te = stack.getOrCreateTagElement("TieredEchoes");
         final CompoundTag domains = new CompoundTag();
@@ -151,7 +151,7 @@ class TierServiceTest {
     /** A ladder whose domain the datapack has since removed must not discard the item's other rungs. */
     @Test
     void aLadderForARemovedDomainIsSkippedRatherThanDiscardingTheItem() {
-        this.service.replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0, 0)));
+        this.service.replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0)));
         final ItemStack stack = new ItemStack(Items.IRON_AXE);
         final CompoundTag te = stack.getOrCreateTagElement("TieredEchoes");
         final CompoundTag domains = new CompoundTag();
@@ -169,7 +169,7 @@ class TierServiceTest {
 
     @Test
     void aTierIdThatNoLongerExistsResolvesToNothingSoTheItemIsNotMislabeled() {
-        this.service.replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0, 0)));
+        this.service.replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0)));
         final ItemStack stack = new ItemStack(Items.IRON_SWORD);
         stack.getOrCreateTagElement("TieredEchoes").putString("tier_id", TestTiers.id("vanished").toString());
 
@@ -187,8 +187,8 @@ class TierServiceTest {
     @Test
     void anItemInATagWithNothingRecordedIsTierlessRatherThanDefaultingToTheFirstRung() {
         this.service.replaceAll(List.of(
-                TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
-                TestTiers.tier("uncommon", TierDomain.WEAPON, 1, 25)));
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.tier("uncommon", TierDomain.WEAPON, 1)));
         TestTags.bindDomain(TierDomain.WEAPON, Items.IRON_SWORD);
 
         final Optional<TierDefinition> tier = this.service.resolveCurrentTier(new ItemStack(Items.IRON_SWORD), null);
@@ -204,7 +204,7 @@ class TierServiceTest {
      */
     @Test
     void anItemInNoTagCarriesNoDomainWhateverItsClass() {
-        this.service.replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0, 0)));
+        this.service.replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0)));
         TestTags.clear();
 
         assertTrue(this.service.inferDomains(Items.IRON_SWORD).isEmpty(),
@@ -219,8 +219,8 @@ class TierServiceTest {
     @Test
     void anItemInTwoTagsBelongsToTwoDomains() {
         this.service.replaceAll(List.of(
-                TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
-                TestTiers.tier("common", TierDomain.TOOL, 0, 0)));
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.tier("common", TierDomain.TOOL, 0)));
         TestTags.bindDomain(TierDomain.WEAPON, Items.IRON_AXE);
         TestTags.bindDomain(TierDomain.TOOL, Items.IRON_AXE);
 
@@ -229,7 +229,7 @@ class TierServiceTest {
 
     @Test
     void itemsThatCannotCarryADomainGetNoTierAtAll() {
-        this.service.replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0, 0)));
+        this.service.replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0)));
         TestTags.clear();
 
         assertTrue(this.service.resolveCurrentTier(new ItemStack(Items.POTATO), null).isEmpty(),
@@ -239,9 +239,9 @@ class TierServiceTest {
     @Test
     void previousTierFallsBackToListPositionWhenNoExplicitChainIsDeclared() {
         this.service.replaceAll(List.of(
-                TestTiers.tier("a", TierDomain.WEAPON, 0, 0),
-                TestTiers.tier("b", TierDomain.WEAPON, 1, 10),
-                TestTiers.tier("c", TierDomain.WEAPON, 2, 20)));
+                TestTiers.tier("a", TierDomain.WEAPON, 0),
+                TestTiers.tier("b", TierDomain.WEAPON, 1),
+                TestTiers.tier("c", TierDomain.WEAPON, 2)));
 
         assertEquals(Optional.empty(), this.service.getPreviousTier(
                 this.service.getTier(TestTiers.id("a"), TierDomain.WEAPON).orElseThrow()));

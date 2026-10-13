@@ -35,7 +35,6 @@ class TierCodecTest {
                 3,
                 Rarity.EPIC,
                 7,
-                120,
                 new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", "diamond")),
                 Optional.of(new IngredientMatcher(IngredientMatcher.Kind.TAG, new ResourceLocation("minecraft", "ingots"))),
                 Optional.of(TestTiers.id("previous")),
@@ -65,7 +64,7 @@ class TierCodecTest {
     @Test
     void optionalFieldsSurviveBothTheirEmptyAndPresentForms() {
         final TierDefinition minimal = new TierDefinition(
-                TestTiers.id("plain"), TierDomain.WEAPON, 1, Rarity.COMMON, 0, 0,
+                TestTiers.id("plain"), TierDomain.WEAPON, 1, Rarity.COMMON, 0,
                 new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", "stick")),
                 Optional.empty(), Optional.empty(), Optional.empty(),
                 Map.of(), Map.of(), Map.of(), false, true);
@@ -79,7 +78,7 @@ class TierCodecTest {
     @Test
     void tierListKeepsItsOrderAndSize() {
         final List<TierDefinition> tiers = List.of(fullyPopulatedTier(),
-                new TierDefinition(TestTiers.id("second"), TierDomain.TOOL, 1, Rarity.RARE, 1, 25,
+                new TierDefinition(TestTiers.id("second"), TierDomain.TOOL, 1, Rarity.RARE, 1,
                         new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", "iron_ingot")),
                         Optional.empty(), Optional.empty(), Optional.empty(),
                         Map.of(), Map.of(), Map.of(), true, true));
@@ -114,33 +113,41 @@ class TierCodecTest {
         assertThrows(IndexOutOfBoundsException.class, () -> TierCodec.readTier(truncated));
     }
 
+    /**
+     * All thirty-two combinations of the five switches.
+     *
+     * <p>Exhaustive rather than representative because the codec writes five bits in a fixed order
+     * with no presence flags, so a single swapped pair is invisible in any sample that does not
+     * vary both of the fields it swapped.</p>
+     */
     @Test
-    void policyRoundTripsEveryMode() {
-        for (final TierPolicy.Mode mode : TierPolicy.Mode.values()) {
-            for (final TierPolicy.MultiPathResolution resolution : TierPolicy.MultiPathResolution.values()) {
-                final TierPolicy original = new TierPolicy(mode, resolution, mode != TierPolicy.Mode.AUTO_ONLY,
-                        resolution == TierPolicy.MultiPathResolution.FIRST, Boolean.TRUE);
-                final FriendlyByteBuf buf = buffer();
+    void policyRoundTripsEveryCombinationOfSwitches() {
+        int tested = 0;
+        for (int bits = 0; bits < 32; bits++) {
+            final TierPolicy original = new TierPolicy(
+                    (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0, (bits & 8) != 0, (bits & 16) != 0);
+            final FriendlyByteBuf buf = buffer();
 
-                TierCodec.writePolicy(buf, original);
+            TierCodec.writePolicy(buf, original);
 
-                assertEquals(original, TierCodec.readPolicy(buf), mode + "/" + resolution);
-            }
+            assertEquals(original, TierCodec.readPolicy(buf), "bits " + Integer.toBinaryString(bits));
+            tested++;
         }
+        assertEquals(32, tested, "every combination should have been exercised");
     }
 
+    /** An explicit false must survive: "the switch is off" and "no switch was declared" differ. */
     @Test
     void policyDistinguishesAnExplicitFalseFromNoStatementAtAll() {
-        final TierPolicy explicitFalse = new TierPolicy(TierPolicy.Mode.HYBRID, TierPolicy.MultiPathResolution.RANDOM,
-                true, false, Boolean.FALSE);
+        final TierPolicy allOff = new TierPolicy(false, false, false, false, false);
         final TierPolicy undeclared = TierPolicy.defaults();
         final FriendlyByteBuf first = buffer();
         final FriendlyByteBuf second = buffer();
 
-        TierCodec.writePolicy(first, explicitFalse);
+        TierCodec.writePolicy(first, allOff);
         TierCodec.writePolicy(second, undeclared);
 
-        assertEquals(explicitFalse, TierCodec.readPolicy(first));
+        assertEquals(allOff, TierCodec.readPolicy(first));
         assertEquals(undeclared, TierCodec.readPolicy(second));
     }
 }

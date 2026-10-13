@@ -2,72 +2,85 @@ package org.bitwisemadness.tieredechoes.common.policy;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The policy record is the switchboard between the two progression routes, so its derived
- * predicates are pinned directly rather than only through the services that read them.
+ * The policy record is the switchboard every read site consults, so its derived predicates are
+ * pinned directly rather than only through the services that call them.
+ *
+ * <p>The distinction the whole design rests on — a <em>system</em> is whether something exists, a
+ * <em>progression</em> rule is whether something may be gained — lives in these predicates.</p>
  */
 class TierPolicyTest {
 
     @Test
-    void defaultsKeepBothRoutesOpen() {
+    void defaultsOpenEveryRouteExceptTheWayDown() {
         final TierPolicy defaults = TierPolicy.defaults();
 
-        assertEquals(TierPolicy.Mode.HYBRID, defaults.mode());
-        assertEquals(TierPolicy.MultiPathResolution.RANDOM, defaults.multiPathResolution());
-        assertTrue(defaults.carryOverExcessXp());
-        assertFalse(defaults.disableUpgradeRecipes());
-        assertTrue(defaults.autoUpgradeEnabled());
-        assertTrue(defaults.upgradeRecipesEnabled());
-        assertEquals(Optional.empty(), defaults.declaredConsumeAttunementItem());
+        assertTrue(defaults.tierSystem());
+        assertTrue(defaults.tierUpgrades());
+        assertTrue(defaults.levellingSystem());
+        assertTrue(defaults.levelUp());
+        assertFalse(defaults.downgrades(),
+                "the way down is opt-in; a pack that declares a route has to ask for it to be published");
+        assertFalse(defaults.downgradesPublished());
     }
 
     @Test
-    void autoOnlyRemovesTheSmithingRecipesButKeepsXpDrivingProgression() {
-        final TierPolicy policy = new TierPolicy(TierPolicy.Mode.AUTO_ONLY, TierPolicy.MultiPathResolution.FIRST,
-                true, false, null);
-
-        assertTrue(policy.autoUpgradeEnabled());
-        assertFalse(policy.upgradeRecipesEnabled());
+    void fiveBooleansAreExactlyWhatARecordHolds() {
+        assertEquals(TierPolicy.class.getRecordComponents().length, 5,
+                "every component should be a switch the datapack can flip");
     }
 
     @Test
-    void smithingOnlyStopsXpFromEverAdvancingATier() {
-        final TierPolicy policy = new TierPolicy(TierPolicy.Mode.SMITHING_ONLY, TierPolicy.MultiPathResolution.FIRST,
-                true, false, null);
+    void closingTierUpgradesClosesOnlyTheUpgradeRoute() {
+        final TierPolicy policy = new TierPolicy(true, false, true, true, true);
 
-        assertFalse(policy.autoUpgradeEnabled());
-        assertTrue(policy.upgradeRecipesEnabled());
+        assertFalse(policy.upgradesPublished());
+        assertTrue(policy.downgradesPublished(),
+                "the way down is a separate switch and must stay open");
+        assertTrue(policy.tierSystem(), "closing a route must not remove the system it belongs to");
+        assertTrue(policy.levellingSystem(), "the level system is independent of the tier routes");
     }
 
     @Test
-    void disableUpgradeRecipesAppliesOnTopOfMode() {
-        final TierPolicy policy = new TierPolicy(TierPolicy.Mode.HYBRID, TierPolicy.MultiPathResolution.RANDOM,
-                true, true, null);
+    void closingTheTierSystemClosesBothRoutesThatBelongToIt() {
+        final TierPolicy policy = new TierPolicy(false, true, true, true, true);
 
-        assertFalse(policy.upgradeRecipesEnabled(), "the kill-switch must win over HYBRID");
-        assertTrue(policy.autoUpgradeEnabled(), "the kill-switch only targets recipes, not xp");
+        assertFalse(policy.upgradesPublished());
+        assertFalse(policy.downgradesPublished());
+        assertTrue(policy.tierUpgrades(), "the route's own switch is still declared as on");
     }
 
     @Test
-    void explicitFalseOnAttunementConsumptionIsStillADeclaration() {
-        final TierPolicy policy = new TierPolicy(TierPolicy.Mode.HYBRID, TierPolicy.MultiPathResolution.RANDOM,
-                true, false, Boolean.FALSE);
+    void downgradesAreTheirOwnSwitchAndNotAnAfterthoughtOfUpgrades() {
+        final TierPolicy closedUpgrades = new TierPolicy(true, false, true, true, true);
+        final TierPolicy closedDowngrades = new TierPolicy(true, true, true, true, false);
 
-        assertEquals(Optional.of(Boolean.FALSE), policy.declaredConsumeAttunementItem(),
-                "an explicit false must not be mistaken for 'not configured'");
+        assertFalse(closedUpgrades.upgradesPublished());
+        assertTrue(closedUpgrades.downgradesPublished());
+
+        assertTrue(closedDowngrades.upgradesPublished(),
+                "the way up must not inherit the way down's switch");
+        assertFalse(closedDowngrades.downgradesPublished());
     }
 
     @Test
-    void nullComponentsFallBackToSensibleDefaultsRatherThanNpe() {
-        final TierPolicy policy = new TierPolicy(null, null, true, false, null);
+    void theLevelSystemCanBeKeptWhileLevelingUpIsClosed() {
+        final TierPolicy policy = new TierPolicy(true, true, true, false, true);
 
-        assertEquals(TierPolicy.Mode.HYBRID, policy.mode());
-        assertEquals(TierPolicy.MultiPathResolution.RANDOM, policy.multiPathResolution());
+        assertTrue(policy.levellingSystem(), "items still carry a level");
+        assertFalse(policy.levelUp(), "they simply may not gain another one");
+    }
+
+    @Test
+    void shuttingTheLevelSystemDownDoesNotAlsoClaimLevelUpIsClosed() {
+        final TierPolicy policy = new TierPolicy(true, true, false, true, true);
+
+        assertFalse(policy.levellingSystem());
+        assertTrue(policy.levelUp(),
+                "the two switches are independent, so one does not answer for the other");
     }
 }

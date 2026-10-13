@@ -1,8 +1,6 @@
 package org.bitwisemadness.tieredechoes.common.path;
 
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import org.bitwisemadness.tieredechoes.common.data.loader.ShippedDatapack;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
@@ -82,30 +80,6 @@ class PathServiceTest {
         assertEquals(Optional.empty(), this.service.getDowngradeEdge(TestTiers.id("common"), TierDomain.WEAPON));
     }
 
-    /**
-     * A stale attunement is ignored rather than honoured or fatal.
-     *
-     * <p>Branch selection is disabled pending a rework, so nothing ever writes a
-     * {@code selected_branch_id} any more. Items upgraded before the change still carry one though,
-     * and the field stays in the packet and the NBT for that reason — the point of this assertion is
-     * that such an item upgrades normally instead of being locked out by a selection no edge can
-     * match any more.</p>
-     */
-    @Test
-    void aStaleBranchSelectionIsIgnoredRatherThanHonouredOrFatal() {
-        this.service.replaceAll(List.of(
-                TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1, Optional.empty(), Optional.empty(),
-                        Optional.of("branch_a")),
-                TestTiers.edge("common", "rare", TierDomain.WEAPON, 2, Optional.empty(), Optional.empty(),
-                        Optional.of("branch_b"))));
-
-        assertEquals(2, this.service.resolveNextEdges(TestTiers.id("common"), TierDomain.WEAPON, Optional.empty()).size());
-        assertEquals(2, this.service.resolveNextEdges(TestTiers.id("common"), TierDomain.WEAPON, Optional.of("branch_b")).size(),
-                "a selection must not narrow the choice while selection is disabled");
-        assertEquals(2, this.service.resolveNextEdges(TestTiers.id("common"), TierDomain.WEAPON, Optional.of("stale")).size(),
-                "an attunement left over from an older build must not lock an item out of upgrading");
-    }
-
     @Test
     void branchIdFallsBackToTheTransitionWhenNoDisplayNameWasGiven() {
         final TierEdge explicit = TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1,
@@ -117,29 +91,36 @@ class PathServiceTest {
         assertEquals(TestTiers.id("common") + "->" + TestTiers.id("uncommon"), this.service.effectiveBranchId(derived));
     }
 
+    /**
+     * Every route out of a tier is offered, in the order the file declared them, and the graph
+     * holds nothing that would choose between them.
+     *
+     * <p>This is the replacement for branch selection: the recipe the player picks at the smithing
+     * table is the choice, so the graph's job is only to be a complete and stable list of what is
+     * on offer. Asserting both halves matters — a graph that quietly filtered routes would leave a
+     * fork unreachable, and one that reordered them would make a datapack's intent depend on hash
+     * order.</p>
+     */
     @Test
-    void attunementResolvesTheEdgeWhoseIngredientMatchesTheOffhand() {
+    void everyRouteOutOfATierIsOfferedInDeclarationOrder() {
         this.service.replaceAll(List.of(
-                TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1, Optional.of(TestTiers.item("iron_ingot")),
-                        Optional.empty(), Optional.of("branch_a")),
-                TestTiers.edge("common", "rare", TierDomain.WEAPON, 2, Optional.of(TestTiers.item("diamond")),
-                        Optional.empty(), Optional.of("branch_b"))));
+                TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1, Optional.empty(), Optional.empty(),
+                        Optional.of("branch_a")),
+                TestTiers.edge("common", "rare", TierDomain.WEAPON, 2, Optional.empty(), Optional.empty(),
+                        Optional.of("branch_b"))));
 
-        final Optional<TierEdge> iron = this.service.resolveAttunementEdge(TestTiers.id("common"),
-                TierDomain.WEAPON, new ItemStack(Items.IRON_INGOT));
-        final Optional<TierEdge> diamond = this.service.resolveAttunementEdge(TestTiers.id("common"),
-                TierDomain.WEAPON, new ItemStack(Items.DIAMOND));
-        final Optional<TierEdge> unrelated = this.service.resolveAttunementEdge(TestTiers.id("common"),
-                TierDomain.WEAPON, new ItemStack(Items.STICK));
+        final List<TierEdge> offered = this.service.getOutgoingEdges(TestTiers.id("common"), TierDomain.WEAPON);
 
-        assertEquals("branch_a", iron.orElseThrow().displayBranchId().orElseThrow());
-        assertEquals("branch_b", diamond.orElseThrow().displayBranchId().orElseThrow());
-        assertTrue(unrelated.isEmpty(), "an offhand nobody attuned with must not select a branch");
+        assertEquals(2, offered.size(), "a fork must offer both of its routes");
+        assertEquals(1, offered.get(0).registrationOrder());
+        assertEquals(2, offered.get(1).registrationOrder());
+        assertEquals(List.copyOf(offered), this.service.getOutgoingEdges(TestTiers.id("common"), TierDomain.WEAPON),
+                "asking twice must produce the same order, or a fork's routes would shuffle between reads");
     }
 
     @Test
     void validationCatchesAnEdgePointingAtATierThatDoesNotExist() {
-        TierService.getInstance().replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0, 0)));
+        TierService.getInstance().replaceAll(List.of(TestTiers.tier("common", TierDomain.WEAPON, 0)));
         this.service.replaceAll(List.of(TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1,
                 Optional.empty(), Optional.empty(), Optional.empty())));
 
@@ -152,9 +133,9 @@ class PathServiceTest {
     @Test
     void validationCatchesTwoEdgesClaimingTheSameBranchId() {
         TierService.getInstance().replaceAll(List.of(
-                TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
-                TestTiers.tier("uncommon", TierDomain.WEAPON, 1, 10),
-                TestTiers.tier("rare", TierDomain.WEAPON, 2, 20)));
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.tier("uncommon", TierDomain.WEAPON, 1),
+                TestTiers.tier("rare", TierDomain.WEAPON, 2)));
         this.service.replaceAll(List.of(
                 TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1, Optional.empty(), Optional.empty(),
                         Optional.of("same_id")),
@@ -166,29 +147,11 @@ class PathServiceTest {
         assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("duplicate_branch_id")));
     }
 
-    /** Two branches distinguishable only by an identical ingredient would be un-attunable. */
-    @Test
-    void validationCatchesTwoBranchesSharingOneAttunementIngredient() {
-        TierService.getInstance().replaceAll(List.of(
-                TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
-                TestTiers.tier("uncommon", TierDomain.WEAPON, 1, 10),
-                TestTiers.tier("rare", TierDomain.WEAPON, 2, 20)));
-        this.service.replaceAll(List.of(
-                TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1, Optional.of(TestTiers.item("diamond")),
-                        Optional.empty(), Optional.of("branch_a")),
-                TestTiers.edge("common", "rare", TierDomain.WEAPON, 2, Optional.of(TestTiers.item("diamond")),
-                        Optional.empty(), Optional.of("branch_b"))));
-
-        final ValidationReport report = this.service.validate(TierService.getInstance());
-
-        assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("ambiguous_attunement_ingredient")));
-    }
-
     @Test
     void aLadderWithNoGapsValidatesClean() {
         TierService.getInstance().replaceAll(List.of(
-                TestTiers.tier("common", TierDomain.WEAPON, 0, 0),
-                TestTiers.tier("uncommon", TierDomain.WEAPON, 1, 10)));
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.tier("uncommon", TierDomain.WEAPON, 1)));
         this.service.replaceAll(List.of(TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1,
                 Optional.of(TestTiers.item("iron_ingot")), Optional.of(TestTiers.id("common")), Optional.empty())));
 
@@ -196,6 +159,95 @@ class PathServiceTest {
 
         assertEquals(0, report.errorCount(), () -> describe(report));
         assertEquals(0, report.warningCount(), () -> describe(report));
+    }
+
+    /**
+     * The template is what chooses a branch, so two branches that name the same one are not two
+     * branches at all: the table matches whichever it finds first and the other cannot be taken.
+     *
+     * <p>The addition is compared alongside it because that is the other half of what a player puts
+     * in the slot. Two routes that share a template but differ in material are still two routes —
+     * the material is the choice — which is the next test.</p>
+     */
+    @Test
+    void twoBranchesAskingForTheSameTemplateAndAdditionAreAmbiguous() {
+        final ResourceLocation shared = TestTiers.id("shared_upgrade_template");
+        TierService.getInstance().replaceAll(List.of(
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.naming(TestTiers.tier("uncommon", TierDomain.WEAPON, 1), shared, TestTiers.id("u_down")),
+                TestTiers.naming(TestTiers.tier("rare", TierDomain.WEAPON, 2), shared, TestTiers.id("r_down"))));
+        this.service.replaceAll(List.of(
+                TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.empty(), Optional.of("to_uncommon")),
+                TestTiers.edge("common", "rare", TierDomain.WEAPON, 2,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.empty(), Optional.of("to_rare"))));
+
+        final ValidationReport report = this.service.validate(TierService.getInstance());
+
+        assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("ambiguous_branch_selection")),
+                () -> "a fork that asks for one template at one price is one transition twice:" + describe(report));
+    }
+
+    /** Sharing a template is only a problem when the addition is shared too. */
+    @Test
+    void aForkThatPricesItsBranchesDifferentlyIsNotAmbiguous() {
+        final ResourceLocation shared = TestTiers.id("shared_upgrade_template");
+        TierService.getInstance().replaceAll(List.of(
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.naming(TestTiers.tier("uncommon", TierDomain.WEAPON, 1), shared, TestTiers.id("u_down")),
+                TestTiers.naming(TestTiers.tier("rare", TierDomain.WEAPON, 2), shared, TestTiers.id("r_down"))));
+        this.service.replaceAll(List.of(
+                TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.empty(), Optional.of("to_uncommon")),
+                TestTiers.edge("common", "rare", TierDomain.WEAPON, 2,
+                        Optional.of(TestTiers.item("gold_ingot")), Optional.empty(), Optional.of("to_rare"))));
+
+        final ValidationReport report = this.service.validate(TierService.getInstance());
+
+        assertTrue(report.issues().stream().noneMatch(issue -> issue.type().equals("ambiguous_branch_selection")),
+                () -> "the addition tells these apart, which is exactly what it is for:" + describe(report));
+    }
+
+    /**
+     * The way down is the one direction whose template every route out of a rung shares — it is
+     * named by the rung being left, which is the same rung for all of them — so the addition is the
+     * only thing left to tell two of them apart.
+     */
+    @Test
+    void twoDowngradeRoutesOutOfOneRungWithTheSameAdditionAreAmbiguous() {
+        TierService.getInstance().replaceAll(List.of(
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.tier("uncommon", TierDomain.WEAPON, 1),
+                TestTiers.tier("rare", TierDomain.WEAPON, 2)));
+        this.service.replaceAll(List.of(
+                TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.of(TestTiers.id("common")), Optional.of("up_from_common")),
+                TestTiers.edge("rare", "uncommon", TierDomain.WEAPON, 2,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.of(TestTiers.id("rare")), Optional.of("up_from_rare"))));
+
+        final ValidationReport report = this.service.validate(TierService.getInstance());
+
+        assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("ambiguous_branch_selection")),
+                () -> "two ways down from uncommon at the same price cannot both be taken:" + describe(report));
+    }
+
+    /** An edge with no route down generates no recipe, so it cannot be one of an ambiguous pair. */
+    @Test
+    void aSingleWayDownIsNotAmbiguousEvenAlongsideARouteThatHasNone() {
+        TierService.getInstance().replaceAll(List.of(
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.tier("uncommon", TierDomain.WEAPON, 1),
+                TestTiers.tier("rare", TierDomain.WEAPON, 2)));
+        this.service.replaceAll(List.of(
+                TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.of(TestTiers.id("common")), Optional.of("up_from_common")),
+                TestTiers.edge("rare", "uncommon", TierDomain.WEAPON, 2,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.empty(), Optional.of("up_from_rare"))));
+
+        final ValidationReport report = this.service.validate(TierService.getInstance());
+
+        assertTrue(report.issues().stream().noneMatch(issue -> issue.type().equals("ambiguous_branch_selection")),
+                () -> "only one route down exists, so there is nothing to confuse it with:" + describe(report));
     }
 
     private static String describe(final ValidationReport report) {

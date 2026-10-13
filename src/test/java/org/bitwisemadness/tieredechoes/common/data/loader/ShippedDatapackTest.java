@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -77,20 +78,20 @@ class ShippedDatapackTest {
     /**
      * The first rung must cost something, or a tierless item climbs the ladder for free.
      *
-     * <p>Experience is checked against the edge's target tier, so the rung being joined is the one
-     * whose requirement is spent — and an untiered item reaches the bootstrap transition the moment
-     * any experience is awarded. A first rung priced at zero would put every new sword in a domain
-     * on the ladder with no action from its owner.</p>
+     * <p>What joining costs is now the smithing addition alone — there is no pool to spend — so the
+     * check is that every domain opens with a real material rather than an empty slot. It reads
+     * across all built-in domains rather than only the weapon one, which is where the material list
+     * above stops.</p>
      */
     @Test
-    void theFirstRungCostsExperienceSoATierlessItemDoesNotJoinForFree() {
+    void theFirstRungOfEveryDomainCostsAMaterialSoNothingJoinsForFree() {
         for (final TierDomain domain : TierDomain.builtinDomains()) {
             final TierDefinition first = ShippedDatapack.load().tiers().stream()
                     .filter(tier -> tier.domain() == domain)
                     .findFirst()
                     .orElseThrow();
-            assertTrue(first.experienceRequired() > 0,
-                    domain + "'s first rung is free, so its items tier themselves at no cost");
+            assertTrue(first.upgradeIngredient().toIngredient().getItems().length > 0,
+                    domain + "'s first rung takes nothing in the addition slot, so joining it is free");
         }
     }
 
@@ -128,10 +129,10 @@ class ShippedDatapackTest {
     }
 
     /**
-     * Upgrade templates only. Downgrades are disabled pending a rework, so a shipped downgrade
-     * template would be an item in the creative tab advertising a transition the smithing table
-     * cannot perform. {@code tier_templates} parsing is untouched, so a datapack declaring one still
-     * loads — the mod simply does not supply any.</p>
+     * Upgrade templates only. The way down is opt-in and the shipped ladder declares no route, so a
+     * shipped downgrade template would be an item in the creative tab advertising a transition the
+     * smithing table cannot perform. {@code tier_templates} parsing is untouched, so a datapack
+     * declaring one still loads — the mod simply does not supply any.
      */
     @Test
     void shipsExactlyOneUpgradeTemplatePerTierAndNoDowngradeTemplate() {
@@ -139,14 +140,25 @@ class ShippedDatapackTest {
 
         assertEquals(5, templates.size(), "five rungs, one upgrade template each");
 
-        final Set<String> keys = new HashSet<>();
+        final Set<ResourceLocation> ids = new HashSet<>();
         for (final TemplateDefinition template : templates) {
-            assertFalse(template.downgrade(), template.id() + " is a downgrade template; none are shipped");
-            assertTrue(keys.add(template.tier() + "|false"),
-                    "duplicate (tier, downgrade) declaration for " + template.tier());
+            assertTrue(ids.add(template.id()), "duplicate template id " + template.id());
         }
         for (final String tier : List.of("common", "uncommon", "rare", "epic", "legendary")) {
-            assertTrue(keys.contains("tieredechoes:" + tier + "|false"), tier + " upgrade template missing");
+            assertTrue(ids.contains(new ResourceLocation("tieredechoes", tier + "_upgrade_template")),
+                    tier + " upgrade template missing");
+        }
+    }
+
+    /**
+     * The item is the declaration's own name, which is what lets a tier that names no template find
+     * it: the id a tier looks up by convention and the item the slot consumes are the same thing.
+     */
+    @Test
+    void everyShippedTemplateSpendsTheItemItIsNamedAfter() {
+        for (final TemplateDefinition template : ShippedDatapack.load().templates()) {
+            assertEquals(Optional.of(template.id()), template.item(),
+                    template.id() + " should declare itself as the item it consumes");
         }
     }
 
@@ -156,13 +168,13 @@ class ShippedDatapackTest {
             final String id = template.id().getPath();
             assertFalse(id.contains("weapon") || id.contains("tool") || id.contains("armor") || id.contains("accessory"),
                     template.id() + " is still domain-scoped; one template per tier is the contract");
-            assertTrue(id.startsWith(template.tier().getPath() + "_"),
-                    template.id() + " should be named after its tier");
+            assertTrue(id.endsWith("_upgrade_template"), template.id() + " is not an upgrade template");
         }
     }
 
     /**
-     * Downgrade targets are absent by design right now, not by omission.
+     * No shipped step declares where the way down lands, and the {@code downgrades} switch is off
+     * by default on top of that.
      *
      * <p>Asserting that directly is the difference between a test that notices a regression and one
      * that quietly accepts a re-enable. The addition assertion is the one that must stay true: a
@@ -172,10 +184,10 @@ class ShippedDatapackTest {
     @Test
     void everyShippedTransitionHasAnAdditionAndNoneHasADowngradeTarget() {
         for (final TierEdge edge : ShippedDatapack.load().edges()) {
-            assertTrue(edge.attunementIngredient().isPresent(),
+            assertTrue(edge.additionIngredient().isPresent(),
                     edge.from() + " -> " + edge.to() + " has no addition, so its smithing recipe cannot be generated");
             assertFalse(edge.downgradeTo().isPresent(),
-                    edge.from() + " -> " + edge.to() + " declares a downgrade target, but downgrades are disabled");
+                    edge.from() + " -> " + edge.to() + " declares a downgrade target, but the shipped ladder declares no way down");
         }
     }
 
@@ -205,8 +217,8 @@ class ShippedDatapackTest {
                 org.bitwisemadness.tieredechoes.common.tier.TierService.getInstance().getAllTiers().size());
         assertEquals(TierDomain.builtinDomains().size() * 4,
                 org.bitwisemadness.tieredechoes.common.path.PathService.getInstance().getAllEdgesLike().size());
-        // Templates are keyed by tier and direction rather than by domain, so their count tracks the
-        // number of rungs in a ladder and not the number of domains. Only upgrades ship.
+        // Templates are named entities rather than per-domain ones, so their count tracks the number
+        // of rungs in a ladder and not the number of domains. Only upgrades ship.
         assertEquals(5, org.bitwisemadness.tieredechoes.common.template.TemplateService.getInstance()
                 .declaredTemplates().size());
     }

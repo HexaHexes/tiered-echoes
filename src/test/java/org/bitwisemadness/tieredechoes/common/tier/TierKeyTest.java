@@ -36,8 +36,8 @@ class TierKeyTest {
 
     @Test
     void ofReadsDomainAndIdFromTheTierItself() {
-        final TierDefinition weapon = TestTiers.tier("common", TierDomain.WEAPON, 0, 0);
-        final TierDefinition armor = TestTiers.tier("common", TierDomain.ARMOR, 0, 0);
+        final TierDefinition weapon = TestTiers.tier("common", TierDomain.WEAPON, 0);
+        final TierDefinition armor = TestTiers.tier("common", TierDomain.ARMOR, 0);
 
         assertEquals(new TierKey(TierDomain.WEAPON, TestTiers.id("common")), TierKey.of(weapon));
         assertNotEquals(TierKey.of(weapon), TierKey.of(armor));

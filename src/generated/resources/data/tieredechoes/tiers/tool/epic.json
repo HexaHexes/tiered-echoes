@@ -16,7 +16,6 @@
   "curios_set_bonuses": {},
   "display_rarity": "EPIC",
   "domain": "tool",
-  "experience_required": 1600,
   "generated_downgrade_template": false,
   "generated_upgrade_template": true,
   "id": "tieredechoes:epic",

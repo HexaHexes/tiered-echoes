@@ -16,14 +16,25 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraftforge.gametest.GameTestHolder;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
+import org.bitwisemadness.tieredechoes.common.data.loader.TierRecipeGenerator;
+import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
+import org.bitwisemadness.tieredechoes.common.path.PathService;
+import org.bitwisemadness.tieredechoes.common.path.TierEdge;
+import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
+import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
 import org.bitwisemadness.tieredechoes.common.recipe.TierBootstrapRecipe;
 import org.bitwisemadness.tieredechoes.common.recipe.TierTransitionRecipe;
 import org.bitwisemadness.tieredechoes.common.recipe.TierUpgradeRecipe;
+import org.bitwisemadness.tieredechoes.common.template.TemplateDefinition;
+import org.bitwisemadness.tieredechoes.common.template.TemplateService;
+import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.upgrade.UpgradeService;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -55,12 +66,87 @@ public final class SmithingRecipeGameTest {
         helper.succeed();
     }
 
-    /** Downgrades are disabled, so nothing may be generated for them — but their data path stays. */
+    /**
+     * The shipped ladder declares no way down, so nothing may be generated for one — and the switch
+     * that would publish it is off on top of that. Their data path stays either way.
+     */
     @GameTest
     public static void noDowngradeRecipeIsGenerated(final GameTestHelper helper) {
         helper.assertFalse(helper.getLevel().getRecipeManager().byKey(DOWNGRADE).isPresent(),
-                DOWNGRADE + " was generated, but downgrades are disabled pending a rework");
+                DOWNGRADE + " was generated, but the shipped ladder declares no way down");
         helper.succeed();
+    }
+
+    /**
+     * The part the shipped ladder cannot cover: a route a pack <em>does</em> declare, and the switch
+     * that decides whether it is published.
+     *
+     * <p>Both halves matter. A declared route with the switch off must stay unpublished, or the
+     * operator's override would be a lie; a declared route with the switch on must actually reach
+     * the table, or the declaration would be decoration. The ladder is given a route here and the
+     * switch is turned off around it, because neither condition can be observed from a ladder that
+     * declares nothing.</p>
+     */
+    @GameTest
+    public static void aDeclaredWayDownIsGeneratedOnlyWhileTheSwitchAllowsIt(final GameTestHelper helper) {
+        final PathService paths = PathService.getInstance();
+        final TemplateService templates = TemplateService.getInstance();
+        final PolicyService policy = PolicyService.getInstance();
+        final List<TierEdge> edgesBefore = paths.getAllEdgesLike();
+        final List<TemplateDefinition> templatesBefore = templates.declaredTemplates();
+        final TierPolicy policyBefore = policy.get();
+        try {
+            paths.replaceAll(withADowngradeRoute(edgesBefore));
+            // The route's template is the one named by the rung being left behind, which is not an
+            // item the mod registers: a pack that adds the way down declares what to spend on it.
+            templates.replaceAll(List.of(new TemplateDefinition(
+                    new ResourceLocation(TieredEchoes.MOD_ID, "uncommon_downgrade_template"),
+                    Optional.of(new ResourceLocation("minecraft", "amethyst_shard")),
+                    Optional.empty(),
+                    Optional.empty())));
+            policy.replaceFromDatapack(new TierPolicy(true, true, true, true, true));
+
+            TierRecipeGenerator.regenerateAndInject(helper.getLevel().getRecipeManager(), new ValidationReport());
+            final TierTransitionRecipe down = recipe(helper, DOWNGRADE);
+            final Container slots = new SimpleContainer(slotItem(helper, down.templateIngredient(), "template"),
+                    GameTestTiers.tieredSword(helper, "uncommon"),
+                    slotItem(helper, down.additionIngredient(), "addition"));
+            helper.assertTrue(down.matches(slots, helper.getLevel()),
+                    "an uncommon weapon with the uncommon downgrade template and the edge's addition should match");
+            helper.assertTrue(currentTierId(down.assemble(slots, helper.getLevel().registryAccess()))
+                            .filter(GameTestTiers.tierId("common")::equals).isPresent(),
+                    "the way down must land on the rung it declares");
+
+            policy.replaceFromDatapack(TierPolicy.defaults());
+            TierRecipeGenerator.regenerateAndInject(helper.getLevel().getRecipeManager(), new ValidationReport());
+            helper.assertFalse(helper.getLevel().getRecipeManager().byKey(DOWNGRADE).isPresent(),
+                    "the switch is off, so the declared route must not be published");
+        } finally {
+            paths.replaceAll(edgesBefore);
+            templates.replaceAll(templatesBefore);
+            policy.replaceFromDatapack(policyBefore);
+            TierRecipeGenerator.regenerateAndInject(helper.getLevel().getRecipeManager(), new ValidationReport());
+        }
+        helper.succeed();
+    }
+
+    /** The weapon ladder's opening step, re-declared with somewhere for the way down to land. */
+    private static List<TierEdge> withADowngradeRoute(final List<TierEdge> edges) {
+        final List<TierEdge> replaced = new ArrayList<>(edges);
+        replaced.removeIf(edge -> edge.domain() == TierDomain.WEAPON
+                && edge.from().equals(GameTestTiers.tierId("common"))
+                && edge.to().equals(GameTestTiers.tierId("uncommon")));
+        replaced.add(new TierEdge(
+                GameTestTiers.tierId("common"),
+                GameTestTiers.tierId("uncommon"),
+                TierDomain.WEAPON,
+                0,
+                Optional.of(new IngredientMatcher(IngredientMatcher.Kind.ITEM, new ResourceLocation("minecraft", "iron_ingot"))),
+                Optional.of(GameTestTiers.tierId("common")),
+                Optional.of(TieredEchoes.MOD_ID),
+                Optional.of("weapon_common_to_uncommon"),
+                Map.of()));
+        return replaced;
     }
 
     /**
@@ -68,10 +154,9 @@ public final class SmithingRecipeGameTest {
      * carries exactly where it was.
      */
     @GameTest
-    public static void aSmithingUpgradeCarriesOverExperienceAndEnchantments(final GameTestHelper helper) {
+    public static void aSmithingUpgradeCarriesOverEnchantmentsAndDurability(final GameTestHelper helper) {
         final TierTransitionRecipe upgrade = recipe(helper, UPGRADE);
         final ItemStack base = GameTestTiers.tieredSword(helper, "common");
-        UpgradeService.getInstance().setStoredExperience(base, TierDomain.WEAPON, 55);
         base.enchant(Enchantments.SHARPNESS, 3);
         base.setDamageValue(11);
         helper.assertTrue(upgrade.isBaseIngredient(base),
@@ -87,13 +172,10 @@ public final class SmithingRecipeGameTest {
         helper.assertTrue(result.getItem() == Items.IRON_SWORD, "the material must not change");
         helper.assertTrue(currentTierId(result).filter(GameTestTiers.tierId("uncommon")::equals).isPresent(),
                 "expected the item to land on uncommon but it is on " + currentTierId(result));
-        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(result, TierDomain.WEAPON) == 55,
-                "stored experience must survive a material upgrade");
         helper.assertTrue(EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, result) == 3,
                 "enchantments must survive a material upgrade");
         helper.assertTrue(result.getDamageValue() == 11, "durability must survive a material upgrade");
-        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(base, TierDomain.WEAPON) == 55
-                        && currentTierId(base).filter(GameTestTiers.tierId("common")::equals).isPresent(),
+        helper.assertTrue(currentTierId(base).filter(GameTestTiers.tierId("common")::equals).isPresent(),
                 "the stack sitting in the slot must be left untouched");
         helper.succeed();
     }
@@ -140,7 +222,6 @@ public final class SmithingRecipeGameTest {
     public static void anUntieredSwordJoinsTheLadderThroughSmithing(final GameTestHelper helper) {
         final TierTransitionRecipe bootstrap = recipe(helper, BOOTSTRAP);
         final ItemStack base = new ItemStack(Items.IRON_SWORD);
-        UpgradeService.getInstance().setStoredExperience(base, TierDomain.WEAPON, 55);
         base.enchant(Enchantments.SHARPNESS, 3);
         helper.assertTrue(bootstrap.isBaseIngredient(base), "an iron sword should satisfy the weapon base tag");
 
@@ -153,8 +234,6 @@ public final class SmithingRecipeGameTest {
 
         helper.assertTrue(currentTierId(result).filter(GameTestTiers.tierId("common")::equals).isPresent(),
                 "expected the item to land on common but it is on " + currentTierId(result));
-        helper.assertTrue(UpgradeService.getInstance().getStoredExperience(result, TierDomain.WEAPON) == 55,
-                "stored experience must survive joining the ladder");
         helper.assertTrue(EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, result) == 3,
                 "enchantments must survive joining the ladder");
 

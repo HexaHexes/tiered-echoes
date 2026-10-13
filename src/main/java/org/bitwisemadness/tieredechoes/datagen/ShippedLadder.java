@@ -46,28 +46,6 @@ public final class ShippedLadder {
     private static final List<String> RARITIES = List.of("COMMON", "UNCOMMON", "RARE", "EPIC", TERarities.LEGENDARY);
 
     /**
-     * Experience required to <em>reach</em> each rung.
-     *
-     * <p>Cubic rather than geometric, because the shape matters more than the total. A doubling
-     * curve spends most of its budget on the last step and makes every earlier step feel like
-     * preamble; a cubic one keeps the opening cheap and puts the weight where a player has already
-     * committed to the item. Derived rather than written out so that extending the ladder extends
-     * the curve instead of pairing a new tier with a stale number.</p>
-     *
-     * <p>The rung index is one-based because tierless is not a rung: an item with nothing recorded
-     * is untiered, not sitting on a bottom tier, so there is no index zero to pay for.</p>
-     */
-    private static final List<Integer> EXPERIENCE = experienceCurve();
-
-    private static List<Integer> experienceCurve() {
-        final List<Integer> curve = new ArrayList<>();
-        for (int rung = 1; rung <= TIER_NAMES.size(); rung++) {
-            curve.add(25 * rung * rung * rung);
-        }
-        return List.copyOf(curve);
-    }
-
-    /**
      * The material each step up costs, one per rung.
      *
      * <p>Copper opens the ladder and netherite closes it. The escalation is the familiar vanilla
@@ -126,9 +104,11 @@ public final class ShippedLadder {
     /**
      * Templates the mod ships.
      *
-     * <p>Upgrade only. Downgrades are disabled pending a rework of how the way down should be
-     * expressed, so generating downgrade templates would put items in the creative tab and recipes
-     * in the book for a transition the smithing table will not perform.</p>
+     * <p>Upgrade only. A downgrade route is opt-in twice over — the pack has to declare a
+     * {@code downgrade_to} and the {@code downgrades} switch has to be on — and the shipped ladder
+     * declares neither, so generating downgrade templates would put items in the creative tab and
+     * recipes in the book for a transition the smithing table will not perform. A pack that does
+     * want the way down declares a template of its own to spend on it.</p>
      */
     public static List<String> templateKinds() {
         return List.of("upgrade");
@@ -162,13 +142,10 @@ public final class ShippedLadder {
         for (final String tier : TIER_NAMES) {
             for (final String kind : templateKinds()) {
                 final ResourceLocation id = new ResourceLocation(TieredEchoes.MOD_ID, tier + "_" + kind + "_template");
-                templates.add(new TemplateDefinition(
-                        id,
-                        new ResourceLocation(TieredEchoes.MOD_ID, tier),
-                        false,
-                        Optional.of(id),
-                        Optional.empty(),
-                        Optional.empty()));
+                // The item is the declaration's own name. That is what lets a tier that names no
+                // template resolve to this one: the conventional <tier>_upgrade_template item and
+                // the template that spends it are the same thing by construction.
+                templates.add(new TemplateDefinition(id, Optional.of(id), Optional.empty(), Optional.empty()));
             }
         }
         return templates;
@@ -215,15 +192,15 @@ public final class ShippedLadder {
 
     private static TierDefinition tier(final TierDomain domain, final int index) {
         final String name = TIER_NAMES.get(index);
-        // No downgrade ingredient: the way down is disabled, and declaring a material for a
-        // transition that cannot be taken would advertise a refund the table will not honour.
+        // No downgrade ingredient: the shipped ladder declares no way down, and declaring a
+        // material for a transition no edge can reach would advertise a refund the table will not
+        // honour. A pack that adds the route adds the price with it.
         return new TierDefinition(
                 new ResourceLocation(TieredEchoes.MOD_ID, name),
                 domain,
                 1,
                 rarity(index),
                 index,
-                EXPERIENCE.get(index),
                 item(UPGRADE_INGREDIENTS.get(index)),
                 Optional.empty(),
                 index == 0 ? Optional.empty() : Optional.of(new ResourceLocation(TieredEchoes.MOD_ID, TIER_NAMES.get(index - 1))),
@@ -231,8 +208,8 @@ public final class ShippedLadder {
                 ATTRIBUTE_MULTIPLIERS.get(index),
                 Map.of(),
                 Map.of(),
-                false,
                 true,
+                false,
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
@@ -248,11 +225,10 @@ public final class ShippedLadder {
                 domain,
                 index - 1,
                 Optional.of(item(UPGRADE_INGREDIENTS.get(index))),
-                // No downgrade target, for the same reason the tier declares no downgrade material.
+                // No downgrade target. The way down is opt-in, and a ladder that declares one
+                // route up per step declares exactly the routes it means to sell.
                 Optional.empty(),
                 Optional.of(TieredEchoes.MOD_ID),
-                Optional.empty(),
-                Optional.empty(),
                 Optional.of(domain.getSerializedName() + "_" + from.getPath() + "_to_" + to.getPath()),
                 Map.of());
     }

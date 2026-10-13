@@ -106,11 +106,15 @@ public final class TieredEchoesDataProvider implements DataProvider {
         json.addProperty("domain", tier.domain().getSerializedName());
         json.addProperty("display_rarity", ShippedLadder.rarityNameFor(tier.id()));
         json.addProperty("sort_order", tier.sortOrder());
-        json.addProperty("experience_required", tier.experienceRequired());
         json.addProperty("generated_upgrade_template", tier.generatedUpgradeTemplate());
         json.addProperty("generated_downgrade_template", tier.generatedDowngradeTemplate());
         json.add("upgrade_ingredient", ingredientJson(tier.upgradeIngredient()));
         tier.downgradeIngredient().ifPresent(ingredient -> json.add("downgrade_ingredient", ingredientJson(ingredient)));
+        // Which template this rung names, by template id. The shipped ladder names none and so
+        // spends the conventional <tier>_upgrade_template item; written here so a rung that does
+        // name one can be seen doing it.
+        tier.upgradeTemplateId().ifPresent(id -> json.addProperty("upgrade_template", id.toString()));
+        tier.downgradeTemplateId().ifPresent(id -> json.addProperty("downgrade_template", id.toString()));
         tier.previousTier().ifPresent(previous -> json.addProperty("previous_tier", previous.toString()));
         json.add("attribute_multipliers", numberMapJson(tier.attributeMultipliers()));
         json.add("curios_set_bonuses", numberMapJson(tier.curiosSetBonuses()));
@@ -130,7 +134,7 @@ public final class TieredEchoesDataProvider implements DataProvider {
             edgeJson.addProperty("from", edge.from().toString());
             edgeJson.addProperty("to", edge.to().toString());
             edge.displayBranchId().ifPresent(branch -> edgeJson.addProperty("display_branch_id", branch));
-            edge.attunementIngredient().ifPresent(ingredient -> edgeJson.add("attunement_ingredient", ingredientJson(ingredient)));
+            edge.additionIngredient().ifPresent(ingredient -> edgeJson.add("addition", ingredientJson(ingredient)));
             edge.downgradeTo().ifPresent(target -> edgeJson.addProperty("downgrade_to", target.toString()));
             array.add(edgeJson);
         }
@@ -142,14 +146,11 @@ public final class TieredEchoesDataProvider implements DataProvider {
         final JsonObject json = new JsonObject();
         json.addProperty("schema_version", 1);
         json.addProperty("id", template.id().toString());
-        json.addProperty("tier", template.tier().toString());
-        json.addProperty("kind", template.downgrade() ? "downgrade" : "upgrade");
         template.item().ifPresent(item -> json.addProperty("item", item.toString()));
-        // Model and texture overrides are optional and the shipped templates declare none; the keys
-        // are written so a datapack author can see what is available by copying a file.
-        final String suffix = template.downgrade() ? "downgrade_template" : "upgrade_template";
-        template.itemModelOverride().ifPresent(value -> json.addProperty(suffix + "_item_model", value.toString()));
-        template.textureOverride().ifPresent(value -> json.addProperty(suffix + "_texture", value.toString()));
+        // The overrides are optional and the shipped templates declare none; the keys are written so
+        // a datapack author can see what is available by copying a file.
+        template.itemModelOverride().ifPresent(value -> json.addProperty("item_model_override", value.toString()));
+        template.textureOverride().ifPresent(value -> json.addProperty("texture_override", value.toString()));
         return json;
     }
 

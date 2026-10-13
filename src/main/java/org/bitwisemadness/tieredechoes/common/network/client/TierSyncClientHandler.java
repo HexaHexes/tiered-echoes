@@ -18,10 +18,11 @@ public final class TierSyncClientHandler {
 
     public static void apply(final TierDataSyncPacket packet) {
         TierService.getInstance().replaceAll(packet.tiers());
-        PolicyService.getInstance().replace(packet.policy());
-        SyncedProgressionState.apply(packet.itemExperienceEnabled(), packet.autoUpgradeEnabled(),
-                packet.resetExperienceOnUpgrade(), packet.displayEdges());
-        TieredEchoes.LOGGER.debug("Applied synced tier ladder: {} tiers, {} edges",
-                packet.tiers().size(), packet.displayEdges().size());
+        // What arrived is already resolved against the sending world's gamerules, so it is adopted
+        // as-is. Resolving again here would apply a client's own (default, unset) rules to another
+        // server's intent.
+        PolicyService.getInstance().applyResolved(packet.policy());
+        TieredEchoes.LOGGER.debug("Applied synced tier ladder: {} tiers, policy {}",
+                packet.tiers().size(), packet.policy());
     }
 }

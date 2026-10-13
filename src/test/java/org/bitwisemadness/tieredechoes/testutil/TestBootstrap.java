@@ -43,6 +43,11 @@ public final class TestBootstrap {
             bootstrapFailure = failure;
         }
         assertRegistriesReady(bootstrapFailure);
+        // Forge refuses to answer ConfigValue#get() until a config object is attached. Wiring the
+        // in-memory one here rather than in each test means a production path that consults an
+        // option fails the same way it would in a real game, instead of throwing an opaque
+        // "config value before config is loaded" that points at the test rather than the cause.
+        TestConfig.load();
         initialised = true;
     }
 

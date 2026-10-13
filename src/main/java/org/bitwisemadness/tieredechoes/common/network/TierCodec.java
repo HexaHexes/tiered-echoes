@@ -3,7 +3,6 @@ package org.bitwisemadness.tieredechoes.common.network;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Rarity;
-import org.bitwisemadness.tieredechoes.common.network.client.DisplayEdge;
 import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
 import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
@@ -31,7 +30,6 @@ final class TierCodec {
         buf.writeVarInt(tier.schemaVersion());
         buf.writeEnum(tier.displayRarity());
         buf.writeVarInt(tier.sortOrder());
-        buf.writeVarInt(tier.experienceRequired());
         writeMatcher(buf, tier.upgradeIngredient());
         writeOptionalMatcher(buf, tier.downgradeIngredient());
         writeOptionalResource(buf, tier.previousTier());
@@ -41,8 +39,8 @@ final class TierCodec {
         writeDoubleMap(buf, tier.compatAmplifiers());
         buf.writeBoolean(tier.generatedDowngradeTemplate());
         buf.writeBoolean(tier.generatedUpgradeTemplate());
-        writeOptionalResource(buf, tier.upgradeTemplateItemModel());
-        writeOptionalResource(buf, tier.downgradeTemplateItemModel());
+        writeOptionalResource(buf, tier.upgradeTemplateId());
+        writeOptionalResource(buf, tier.downgradeTemplateId());
         writeOptionalResource(buf, tier.upgradeTemplateTexture());
         writeOptionalResource(buf, tier.downgradeTemplateTexture());
     }
@@ -53,7 +51,6 @@ final class TierCodec {
         final int schemaVersion = buf.readVarInt();
         final Rarity rarity = buf.readEnum(Rarity.class);
         final int sortOrder = buf.readVarInt();
-        final int experienceRequired = buf.readVarInt();
         final IngredientMatcher upgrade = readMatcher(buf);
         final Optional<IngredientMatcher> downgrade = readOptionalMatcher(buf);
         final Optional<ResourceLocation> previousTier = readOptionalResource(buf);
@@ -63,36 +60,34 @@ final class TierCodec {
         final Map<String, Double> compat = readDoubleMap(buf);
         final boolean generatedDowngradeTemplate = buf.readBoolean();
         final boolean generatedUpgradeTemplate = buf.readBoolean();
-        final Optional<ResourceLocation> upgradeTemplateItemModel = readOptionalResource(buf);
-        final Optional<ResourceLocation> downgradeTemplateItemModel = readOptionalResource(buf);
+        final Optional<ResourceLocation> upgradeTemplateId = readOptionalResource(buf);
+        final Optional<ResourceLocation> downgradeTemplateId = readOptionalResource(buf);
         final Optional<ResourceLocation> upgradeTemplateTexture = readOptionalResource(buf);
         final Optional<ResourceLocation> downgradeTemplateTexture = readOptionalResource(buf);
-        return new TierDefinition(id, domain, schemaVersion, rarity, sortOrder, experienceRequired, upgrade,
+        return new TierDefinition(id, domain, schemaVersion, rarity, sortOrder, upgrade,
                 downgrade, previousTier, sourcePack, multipliers, setBonuses, compat,
-                generatedDowngradeTemplate, generatedUpgradeTemplate,
-                upgradeTemplateItemModel, downgradeTemplateItemModel, upgradeTemplateTexture, downgradeTemplateTexture);
+                generatedUpgradeTemplate, generatedDowngradeTemplate,
+                upgradeTemplateId, downgradeTemplateId, upgradeTemplateTexture, downgradeTemplateTexture);
     }
 
+    /**
+     * Five booleans, in field order.
+     *
+     * <p>Each one is a plain bit rather than a presence-flagged value: a switch is two-state by
+     * nature, and the third state that the gamerules use lives on the server, which resolves before
+     * sending. What a client receives is already the answer.</p>
+     */
     static void writePolicy(final FriendlyByteBuf buf, final TierPolicy policy) {
-        buf.writeEnum(policy.mode());
-        buf.writeEnum(policy.multiPathResolution());
-        buf.writeBoolean(policy.carryOverExcessXp());
-        buf.writeBoolean(policy.disableUpgradeRecipes());
-        // Three-state: an explicit false must survive the trip, so presence and value are separate.
-        final Boolean consumeAttunement = policy.consumeAttunementItem();
-        buf.writeBoolean(consumeAttunement != null);
-        if (consumeAttunement != null) {
-            buf.writeBoolean(consumeAttunement);
-        }
+        buf.writeBoolean(policy.tierSystem());
+        buf.writeBoolean(policy.tierUpgrades());
+        buf.writeBoolean(policy.levellingSystem());
+        buf.writeBoolean(policy.levelUp());
+        buf.writeBoolean(policy.downgrades());
     }
 
     static TierPolicy readPolicy(final FriendlyByteBuf buf) {
-        final TierPolicy.Mode mode = buf.readEnum(TierPolicy.Mode.class);
-        final TierPolicy.MultiPathResolution resolution = buf.readEnum(TierPolicy.MultiPathResolution.class);
-        final boolean carryOver = buf.readBoolean();
-        final boolean disableUpgradeRecipes = buf.readBoolean();
-        final Boolean consumeAttunement = buf.readBoolean() ? buf.readBoolean() : null;
-        return new TierPolicy(mode, resolution, carryOver, disableUpgradeRecipes, consumeAttunement);
+        return new TierPolicy(buf.readBoolean(), buf.readBoolean(), buf.readBoolean(),
+                buf.readBoolean(), buf.readBoolean());
     }
 
     static void writeTiers(final FriendlyByteBuf buf, final List<TierDefinition> tiers) {
@@ -114,37 +109,6 @@ final class TierCodec {
             tiers.add(readTier(buf));
         }
         return tiers;
-    }
-
-    static void writeDisplayEdges(final FriendlyByteBuf buf, final List<DisplayEdge> edges) {
-        buf.writeVarInt(edges.size());
-        for (final DisplayEdge edge : edges) {
-            buf.writeResourceLocation(edge.from());
-            buf.writeResourceLocation(edge.to());
-            buf.writeEnum(edge.domain());
-            writeOptionalString(buf, edge.displayBranchId());
-            // Two-state rather than optional-presence: an absent override must survive as absent,
-            // because it means "use the target tier's own experience_required".
-            buf.writeBoolean(edge.experienceRequirementOverride().isPresent());
-            edge.experienceRequirementOverride().ifPresent(buf::writeVarInt);
-        }
-    }
-
-    static List<DisplayEdge> readDisplayEdges(final FriendlyByteBuf buf) {
-        final int size = buf.readVarInt();
-        if (size < 0 || size > 4096) {
-            throw new IllegalArgumentException("Tier sync packet declared an implausible edge count: " + size);
-        }
-        final List<DisplayEdge> edges = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) {
-            final ResourceLocation from = buf.readResourceLocation();
-            final ResourceLocation to = buf.readResourceLocation();
-            final TierDomain domain = buf.readEnum(TierDomain.class);
-            final Optional<String> branchId = readOptionalString(buf);
-            final Optional<Integer> override = buf.readBoolean() ? Optional.of(buf.readVarInt()) : Optional.empty();
-            edges.add(new DisplayEdge(from, to, domain, branchId, override));
-        }
-        return edges;
     }
 
     private static void writeMatcher(final FriendlyByteBuf buf, final IngredientMatcher matcher) {
