@@ -5,6 +5,8 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
+import org.bitwisemadness.tieredechoes.common.level.LevelConfig;
+import org.bitwisemadness.tieredechoes.common.level.LevelCurve;
 import org.bitwisemadness.tieredechoes.common.path.TierEdge;
 import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
 import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
@@ -383,6 +385,118 @@ class TieredEchoesDataReloaderTest {
         assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("superseded_policy_field")),
                 "the key should still be reported as superseded");
         assertEquals(0, report.errorCount(), "a legacy typo must not be an error");
+    }
+
+    // ---------------------------------------------------------------- levels
+
+    @Test
+    void aFileThatDeclaresNoLevelsBlockLeavesTheCurvesAlone() {
+        final ValidationReport report = new ValidationReport();
+
+        final LevelConfig merged = TieredEchoesDataReloader.mergeLevelConfig(LevelConfig.defaults(), json("""
+                {"tier_upgrades":false}
+                """), report);
+
+        assertEquals(LevelConfig.defaults(), merged, "the switches and the curves do not touch");
+        assertEquals(0, report.issues().size());
+    }
+
+    @Test
+    void aLevelsBlockMergesFieldwiseOntoTheRunningAnswer() {
+        final ValidationReport report = new ValidationReport();
+
+        final LevelConfig merged = TieredEchoesDataReloader.mergeLevelConfig(LevelConfig.defaults(), json("""
+                {"levels":{"max_level":20,"experience":{"exponent":2.5}}}
+                """), report);
+
+        assertEquals(20, merged.maxLevel(), "the stated cap must be adopted");
+        assertEquals(2.5D, merged.experience().exponent(), 1.0E-12D, "and so must the stated exponent");
+        assertEquals(LevelCurve.Kind.POLYNOMIAL, merged.experience().kind(),
+                "an unstated kind keeps the running one — this is a steeper curve, not a new species");
+        assertEquals(25.0D, merged.experience().coefficient(), 1.0E-12D);
+        assertEquals(LevelConfig.defaults().attribute(), merged.attribute(),
+                "a block that names only the experience curve leaves the attribute curve alone");
+        assertEquals(0, report.issues().size(), "a well-formed block should produce no findings");
+    }
+
+    @Test
+    void bothCurveSlotsAcceptExactlyTheirOwnKinds() {
+        final ValidationReport goodExperience = new ValidationReport();
+        final LevelConfig exponential = TieredEchoesDataReloader.mergeLevelConfig(LevelConfig.defaults(), json("""
+                {"levels":{"experience":{"kind":"exponential","coefficient":10,"exponent":1.5}}}
+                """), goodExperience);
+
+        assertEquals(LevelCurve.Kind.EXPONENTIAL, exponential.experience().kind());
+        assertEquals(0, goodExperience.issues().size(), "exponential is a real experience curve");
+
+        final ValidationReport goodAttribute = new ValidationReport();
+        final LevelConfig polynomialAttribute = TieredEchoesDataReloader.mergeLevelConfig(LevelConfig.defaults(), json("""
+                {"levels":{"attribute":{"kind":"polynomial","coefficient":0.05,"exponent":1.5}}}
+                """), goodAttribute);
+
+        assertEquals(LevelCurve.Kind.POLYNOMIAL, polynomialAttribute.attribute().kind());
+        assertEquals(0, goodAttribute.issues().size(), "polynomial is a real attribute curve");
+    }
+
+    /** A slot that accepted every kind would let a linear curve cost nothing at level zero. */
+    @Test
+    void aKindTheSlotDoesNotAcceptFallsBackAndIsReported() {
+        final ValidationReport report = new ValidationReport();
+
+        final LevelConfig merged = TieredEchoesDataReloader.mergeLevelConfig(LevelConfig.defaults(), json("""
+                {"levels":{"experience":{"kind":"linear","coefficient":10},"attribute":{"kind":"exponential"}}}
+                """), report);
+
+        assertEquals(LevelConfig.defaults().experience(), merged.experience(),
+                "a linear experience curve would cost nothing; the running curve must stand");
+        assertEquals(LevelConfig.defaults().attribute(), merged.attribute(),
+                "the same for an exponential attribute curve, which would never settle");
+        assertTrue(report.issues().stream().filter(issue -> issue.type().equals("invalid_level_curve")).count() == 2,
+                "both unusable curves should be named");
+        assertEquals(0, report.errorCount(), "a typo in a curve is a warning, not a dead reload");
+    }
+
+    @Test
+    void anUnknownCurveKindFallsBackRatherThanThrowing() {
+        final ValidationReport report = new ValidationReport();
+
+        final LevelConfig merged = TieredEchoesDataReloader.mergeLevelConfig(LevelConfig.defaults(), json("""
+                {"levels":{"experience":{"kind":"cubic"}}}
+                """), report);
+
+        assertEquals(LevelConfig.defaults().experience(), merged.experience());
+        assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("invalid_level_curve")));
+    }
+
+    @Test
+    void parametersThatMeanNothingFallBackAndAreReported() {
+        for (final String block : List.of(
+                "{\"experience\":{\"coefficient\":0}}",
+                "{\"experience\":{\"coefficient\":-5}}",
+                "{\"experience\":{\"exponent\":0}}",
+                "{\"attribute\":{\"coefficient\":1.0E400}}")) {
+            final ValidationReport report = new ValidationReport();
+
+            final LevelConfig merged = TieredEchoesDataReloader.mergeLevelConfig(LevelConfig.defaults(), json(
+                    "{\"levels\":" + block + "}"), report);
+
+            assertEquals(LevelConfig.defaults().experience(), merged.experience(), block);
+            assertEquals(LevelConfig.defaults().attribute(), merged.attribute(), block);
+            assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("invalid_level_curve")),
+                    block + " should be reported");
+        }
+    }
+
+    @Test
+    void aCapBelowOneIsReportedAndTheRunningCapStands() {
+        final ValidationReport report = new ValidationReport();
+
+        final LevelConfig merged = TieredEchoesDataReloader.mergeLevelConfig(LevelConfig.defaults(), json("""
+                {"levels":{"max_level":0}}
+                """), report);
+
+        assertEquals(LevelConfig.defaults().maxLevel(), merged.maxLevel());
+        assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("invalid_max_level")));
     }
 
     // ---------------------------------------------------------------- de-duplication

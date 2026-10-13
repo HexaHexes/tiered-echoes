@@ -6,6 +6,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.GsonHelper;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
+import org.bitwisemadness.tieredechoes.common.level.LevelConfig;
+import org.bitwisemadness.tieredechoes.common.level.LevelService;
 import org.bitwisemadness.tieredechoes.common.path.PathService;
 import org.bitwisemadness.tieredechoes.common.path.TierEdge;
 import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
@@ -151,6 +153,10 @@ public final class ShippedDatapack {
         PathService.getInstance().replaceAll(loaded.edges());
         TemplateService.getInstance().replaceAll(loaded.templates());
         PolicyService.getInstance().replaceFromDatapack(TierPolicy.defaults());
+        // The shipped datapack declares no levels block, so the shipped curves are the Java
+        // defaults; resetting them here is what keeps a test that overrode them from leaking its
+        // cost curve into the next one.
+        LevelService.getInstance().replaceAll(LevelConfig.defaults());
         return loaded;
     }
 

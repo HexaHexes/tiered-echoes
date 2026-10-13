@@ -19,6 +19,9 @@ import org.bitwisemadness.tieredechoes.common.compat.arsnouveau.ArsNouveauCompat
 import org.bitwisemadness.tieredechoes.common.compat.ironsspells.IronsSpellsCompatBridge;
 import org.bitwisemadness.tieredechoes.common.compat.legendarysurvivaloverhaul.LegendarySurvivalOverhaulCompatBridge;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
+import org.bitwisemadness.tieredechoes.common.level.LevelConfig;
+import org.bitwisemadness.tieredechoes.common.level.LevelCurve;
+import org.bitwisemadness.tieredechoes.common.level.LevelService;
 import org.bitwisemadness.tieredechoes.common.rarity.TERarities;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReporter;
@@ -87,7 +90,8 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
         tiers.addAll(loadTiers(manager, report));
         final List<TierDefinition> resolvedTiers = deduplicateTiers(tiers, report);
         edges.addAll(loadEdges(manager, resolvedTiers, report));
-        return new LoadedData(resolvedTiers, deduplicateEdges(edges, report), loadTemplates(manager, report), loadPolicy(manager, report), report);
+        return new LoadedData(resolvedTiers, deduplicateEdges(edges, report), loadTemplates(manager, report),
+                loadPolicy(manager, report), loadLevelConfig(manager, report), report);
     }
 
     private void apply(final LoadedData data) {
@@ -98,6 +102,7 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
         PathService.getInstance().replaceAll(data.edges);
         TemplateService.getInstance().replaceAll(data.templates);
         PolicyService.getInstance().replaceFromDatapack(data.policy);
+        LevelService.getInstance().replaceAll(data.levelConfig);
         final ValidationReport combined = data.report;
         PathService.getInstance().validate(TierService.getInstance()).issues().forEach(combined::add);
         // Generated last so the recipes always reflect the path graph that was just applied.
@@ -226,6 +231,119 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
         report.add(new ValidationIssue(ValidationIssue.Severity.WARNING, "obsolete_policy_field",
                 "'" + key + "' described how accumulated item experience behaved, and is parsed only so the file keeps loading.",
                 Map.of("field", key)));
+    }
+
+    /**
+     * Loads the {@code levels} block from every {@code tier_policies} file, merging them onto the
+     * defaults the same way the five switches do.
+     *
+     * <p>Walked from the same directory as the switches rather than from a directory of its own:
+     * the curves are progression rules, and a pack that flips {@code level_up} off is the pack
+     * that also decides what a level costs while it is on. A file that declares no {@code levels}
+     * block changes nothing about the curves, and a world that never sees one runs the shipped
+     * defaults — ten levels, a cubic cost, two percent of the tier's bonus per level.</p>
+     */
+    private static LevelConfig loadLevelConfig(final ResourceManager manager, final ValidationReport report) {
+        LevelConfig config = LevelConfig.defaults();
+        for (final Map.Entry<ResourceLocation, Resource> entry : manager.listResources(POLICY_DIRECTORY, path -> path.getPath().endsWith(".json")).entrySet()) {
+            try (BufferedReader reader = entry.getValue().openAsReader()) {
+                final JsonObject json = GsonHelper.parse(reader);
+                if (!isCompatEligible(json)) {
+                    continue;
+                }
+                config = mergeLevelConfig(config, json, report);
+            } catch (final Exception exception) {
+                report.add(new ValidationIssue(ValidationIssue.Severity.ERROR, "levels_parse_failure",
+                        "Failed to parse the levels block of a tier policy",
+                        Map.of("resource", entry.getKey().toString(), "error", String.valueOf(exception.getMessage()))));
+            }
+        }
+        return config;
+    }
+
+    /**
+     * Merges one file's {@code levels} block onto the running answer.
+     *
+     * <p>Field-wise, and then curve-wise: a file that only restates {@code max_level} leaves both
+     * curves alone, and a file whose {@code experience} object names only an {@code exponent}
+     * inherits the running curve's kind and coefficient. That is what makes the block behave like
+     * the five switches above it — a two-line datapack can steepen the cost of levels without
+     * restating a system it did not come to change.</p>
+     *
+     * <p>Anything that does not parse falls back to the running answer for that one field and is
+     * reported. A level system with one bad curve is a system worth keeping; a reload that threw
+     * the whole block away would take nine working levels with it.</p>
+     */
+    static LevelConfig mergeLevelConfig(final LevelConfig base, final JsonObject json, final ValidationReport report) {
+        if (!json.has("levels")) {
+            return base;
+        }
+        final JsonObject levels = GsonHelper.getAsJsonObject(json, "levels");
+        int maxLevel = base.maxLevel();
+        if (levels.has("max_level")) {
+            final int declared = GsonHelper.getAsInt(levels, "max_level", maxLevel);
+            if (declared >= 1) {
+                maxLevel = declared;
+            } else {
+                report.add(new ValidationIssue(ValidationIssue.Severity.WARNING, "invalid_max_level",
+                        "'max_level' must be at least 1; the running cap stands.",
+                        Map.of("max_level", String.valueOf(declared))));
+            }
+        }
+        LevelCurve experience = base.experience();
+        if (levels.has("experience")) {
+            experience = mergeCurve(GsonHelper.getAsJsonObject(levels, "experience"), base.experience(),
+                    List.of(LevelCurve.Kind.POLYNOMIAL, LevelCurve.Kind.EXPONENTIAL), "experience", report);
+        }
+        LevelCurve attribute = base.attribute();
+        if (levels.has("attribute")) {
+            attribute = mergeCurve(GsonHelper.getAsJsonObject(levels, "attribute"), base.attribute(),
+                    List.of(LevelCurve.Kind.LINEAR, LevelCurve.Kind.POLYNOMIAL), "attribute", report);
+        }
+        return new LevelConfig(maxLevel, experience, attribute);
+    }
+
+    /**
+     * Merges one curve object onto the running curve of that slot.
+     *
+     * <p>The kind list is the slot's whole grammar: an experience curve may cost polynomially or
+     * exponentially, an attribute curve may pay linearly or polynomially, and a kind the slot does
+     * not accept is a typo rather than a third option — {@code linear} experience would cost zero
+     * at level zero, which is not a price anything can be short of.</p>
+     */
+    private static LevelCurve mergeCurve(final JsonObject json, final LevelCurve base,
+                                         final List<LevelCurve.Kind> allowed, final String slot,
+                                         final ValidationReport report) {
+        LevelCurve.Kind kind = base.kind();
+        if (json.has("kind")) {
+            final String declared = GsonHelper.getAsString(json, "kind");
+            final LevelCurve.Kind parsed;
+            try {
+                parsed = LevelCurve.Kind.valueOf(declared.toUpperCase(java.util.Locale.ROOT));
+            } catch (final IllegalArgumentException ignored) {
+                report.add(invalidCurve(slot, "'" + declared + "' is not a curve kind; the running " + slot + " curve stands."));
+                return base;
+            }
+            if (!allowed.contains(parsed)) {
+                report.add(invalidCurve(slot, "'" + declared + "' is not available to the " + slot + " curve; the running one stands."));
+                return base;
+            }
+            kind = parsed;
+        }
+        final double coefficient = GsonHelper.getAsDouble(json, "coefficient", base.coefficient());
+        final double exponent = GsonHelper.getAsDouble(json, "exponent", base.exponent());
+        if (!(coefficient > 0.0D) || !Double.isFinite(coefficient)
+                || (kind != LevelCurve.Kind.LINEAR && (!(exponent > 0.0D) || !Double.isFinite(exponent)))) {
+            report.add(invalidCurve(slot, "Curve parameters must be finite and positive; the running " + slot + " curve stands."));
+            return base;
+        }
+        return new LevelCurve(kind, coefficient, exponent);
+    }
+
+    private static ValidationIssue invalidCurve(final String slot, final String message) {
+        return new ValidationIssue(ValidationIssue.Severity.WARNING, "invalid_level_curve",
+                "The levels block's " + slot + " curve is unusable: " + message,
+                Map.of("curve", slot));
     }
 
     static List<TierDefinition> deduplicateTiers(final List<TierDefinition> tiers, final ValidationReport report) {
@@ -463,6 +581,6 @@ public final class TieredEchoesDataReloader implements PreparableReloadListener 
         return new IngredientMatcher(IngredientMatcher.Kind.TAG, new ResourceLocation(GsonHelper.getAsString(json, "tag")));
     }
 
-    private record LoadedData(List<TierDefinition> tiers, List<TierEdge> edges, Collection<TemplateDefinition> templates, TierPolicy policy, ValidationReport report) {
+    private record LoadedData(List<TierDefinition> tiers, List<TierEdge> edges, Collection<TemplateDefinition> templates, TierPolicy policy, LevelConfig levelConfig, ValidationReport report) {
     }
 }

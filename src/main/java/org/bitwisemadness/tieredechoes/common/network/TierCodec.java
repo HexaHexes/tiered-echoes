@@ -3,6 +3,8 @@ package org.bitwisemadness.tieredechoes.common.network;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Rarity;
+import org.bitwisemadness.tieredechoes.common.level.LevelConfig;
+import org.bitwisemadness.tieredechoes.common.level.LevelCurve;
 import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
 import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
@@ -88,6 +90,37 @@ final class TierCodec {
     static TierPolicy readPolicy(final FriendlyByteBuf buf) {
         return new TierPolicy(buf.readBoolean(), buf.readBoolean(), buf.readBoolean(),
                 buf.readBoolean(), buf.readBoolean());
+    }
+
+    /**
+     * The level configuration: a cap and the two curves, each as its kind and two doubles.
+     *
+     * <p>Travels with the policy because the tooltip needs it — the progress line quotes the next
+     * level's cost, and a client that had to guess that number would show a threshold the server
+     * disagrees with. The client adopts it as-is, the same way it adopts the resolved policy: what
+     * arrived is the answer that world's datapack gave.</p>
+     */
+    static void writeLevelConfig(final FriendlyByteBuf buf, final LevelConfig config) {
+        buf.writeVarInt(config.maxLevel());
+        writeCurve(buf, config.experience());
+        writeCurve(buf, config.attribute());
+    }
+
+    static LevelConfig readLevelConfig(final FriendlyByteBuf buf) {
+        return new LevelConfig(buf.readVarInt(), readCurve(buf), readCurve(buf));
+    }
+
+    private static void writeCurve(final FriendlyByteBuf buf, final LevelCurve curve) {
+        buf.writeEnum(curve.kind());
+        buf.writeDouble(curve.coefficient());
+        buf.writeDouble(curve.exponent());
+    }
+
+    private static LevelCurve readCurve(final FriendlyByteBuf buf) {
+        // Rebuilt through the record rather than assigned raw: a curve whose parameters make no
+        // sense is a datapack bug the server should have caught, and a hostile packet carrying NaN
+        // would otherwise paint NaN into every scaled attribute on the client.
+        return new LevelCurve(buf.readEnum(LevelCurve.Kind.class), buf.readDouble(), buf.readDouble());
     }
 
     static void writeTiers(final FriendlyByteBuf buf, final List<TierDefinition> tiers) {

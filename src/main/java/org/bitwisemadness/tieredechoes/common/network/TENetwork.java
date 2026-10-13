@@ -10,6 +10,7 @@ import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.simple.SimpleChannel;
 import net.minecraftforge.server.ServerLifecycleHooks;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
+import org.bitwisemadness.tieredechoes.common.level.LevelService;
 import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
 
@@ -22,7 +23,13 @@ import org.bitwisemadness.tieredechoes.common.tier.TierService;
  */
 public final class TENetwork {
 
-    private static final String PROTOCOL_VERSION = "1";
+    /**
+     * Bumped whenever the sync payload's shape changes, so that a mismatched client and server
+     * refuse the handshake rather than trading packets neither can read — which in 1.20.1 means a
+     * clear "incompatible" disconnect instead of a silent desync. The level configuration joined
+     * the payload in the bump to 2.
+     */
+    private static final String PROTOCOL_VERSION = "2";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(TieredEchoes.MOD_ID, "main"),
@@ -71,6 +78,7 @@ public final class TENetwork {
     private static TierDataSyncPacket currentPayload() {
         return new TierDataSyncPacket(
                 TierService.getInstance().getAllTiers(),
-                PolicyService.getInstance().get());
+                PolicyService.getInstance().get(),
+                LevelService.getInstance().config());
     }
 }
