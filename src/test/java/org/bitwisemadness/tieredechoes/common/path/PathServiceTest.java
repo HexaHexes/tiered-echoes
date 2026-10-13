@@ -161,6 +161,95 @@ class PathServiceTest {
         assertEquals(0, report.warningCount(), () -> describe(report));
     }
 
+    /**
+     * The template is what chooses a branch, so two branches that name the same one are not two
+     * branches at all: the table matches whichever it finds first and the other cannot be taken.
+     *
+     * <p>The addition is compared alongside it because that is the other half of what a player puts
+     * in the slot. Two routes that share a template but differ in material are still two routes —
+     * the material is the choice — which is the next test.</p>
+     */
+    @Test
+    void twoBranchesAskingForTheSameTemplateAndAdditionAreAmbiguous() {
+        final ResourceLocation shared = TestTiers.id("shared_upgrade_template");
+        TierService.getInstance().replaceAll(List.of(
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.naming(TestTiers.tier("uncommon", TierDomain.WEAPON, 1), shared, TestTiers.id("u_down")),
+                TestTiers.naming(TestTiers.tier("rare", TierDomain.WEAPON, 2), shared, TestTiers.id("r_down"))));
+        this.service.replaceAll(List.of(
+                TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.empty(), Optional.of("to_uncommon")),
+                TestTiers.edge("common", "rare", TierDomain.WEAPON, 2,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.empty(), Optional.of("to_rare"))));
+
+        final ValidationReport report = this.service.validate(TierService.getInstance());
+
+        assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("ambiguous_branch_selection")),
+                () -> "a fork that asks for one template at one price is one transition twice:" + describe(report));
+    }
+
+    /** Sharing a template is only a problem when the addition is shared too. */
+    @Test
+    void aForkThatPricesItsBranchesDifferentlyIsNotAmbiguous() {
+        final ResourceLocation shared = TestTiers.id("shared_upgrade_template");
+        TierService.getInstance().replaceAll(List.of(
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.naming(TestTiers.tier("uncommon", TierDomain.WEAPON, 1), shared, TestTiers.id("u_down")),
+                TestTiers.naming(TestTiers.tier("rare", TierDomain.WEAPON, 2), shared, TestTiers.id("r_down"))));
+        this.service.replaceAll(List.of(
+                TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.empty(), Optional.of("to_uncommon")),
+                TestTiers.edge("common", "rare", TierDomain.WEAPON, 2,
+                        Optional.of(TestTiers.item("gold_ingot")), Optional.empty(), Optional.of("to_rare"))));
+
+        final ValidationReport report = this.service.validate(TierService.getInstance());
+
+        assertTrue(report.issues().stream().noneMatch(issue -> issue.type().equals("ambiguous_branch_selection")),
+                () -> "the addition tells these apart, which is exactly what it is for:" + describe(report));
+    }
+
+    /**
+     * The way down is the one direction whose template every route out of a rung shares — it is
+     * named by the rung being left, which is the same rung for all of them — so the addition is the
+     * only thing left to tell two of them apart.
+     */
+    @Test
+    void twoDowngradeRoutesOutOfOneRungWithTheSameAdditionAreAmbiguous() {
+        TierService.getInstance().replaceAll(List.of(
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.tier("uncommon", TierDomain.WEAPON, 1),
+                TestTiers.tier("rare", TierDomain.WEAPON, 2)));
+        this.service.replaceAll(List.of(
+                TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.of(TestTiers.id("common")), Optional.of("up_from_common")),
+                TestTiers.edge("rare", "uncommon", TierDomain.WEAPON, 2,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.of(TestTiers.id("rare")), Optional.of("up_from_rare"))));
+
+        final ValidationReport report = this.service.validate(TierService.getInstance());
+
+        assertTrue(report.issues().stream().anyMatch(issue -> issue.type().equals("ambiguous_branch_selection")),
+                () -> "two ways down from uncommon at the same price cannot both be taken:" + describe(report));
+    }
+
+    /** An edge with no route down generates no recipe, so it cannot be one of an ambiguous pair. */
+    @Test
+    void aSingleWayDownIsNotAmbiguousEvenAlongsideARouteThatHasNone() {
+        TierService.getInstance().replaceAll(List.of(
+                TestTiers.tier("common", TierDomain.WEAPON, 0),
+                TestTiers.tier("uncommon", TierDomain.WEAPON, 1),
+                TestTiers.tier("rare", TierDomain.WEAPON, 2)));
+        this.service.replaceAll(List.of(
+                TestTiers.edge("common", "uncommon", TierDomain.WEAPON, 1,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.of(TestTiers.id("common")), Optional.of("up_from_common")),
+                TestTiers.edge("rare", "uncommon", TierDomain.WEAPON, 2,
+                        Optional.of(TestTiers.item("iron_ingot")), Optional.empty(), Optional.of("up_from_rare"))));
+
+        final ValidationReport report = this.service.validate(TierService.getInstance());
+
+        assertTrue(report.issues().stream().noneMatch(issue -> issue.type().equals("ambiguous_branch_selection")),
+                () -> "only one route down exists, so there is nothing to confuse it with:" + describe(report));
+    }
+
     private static String describe(final ValidationReport report) {
         final StringBuilder builder = new StringBuilder();
         for (final ValidationIssue issue : report.issues()) {

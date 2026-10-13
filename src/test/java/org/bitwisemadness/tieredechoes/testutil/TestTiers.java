@@ -47,6 +47,22 @@ public final class TestTiers {
                 true);
     }
 
+    /**
+     * The rung, re-pointed at the named templates rather than at the conventional ones.
+     *
+     * <p>This is what a fork looks like when it is <em>not</em> self-selecting: two rungs naming one
+     * template offer the player no way to tell their branches apart at the table.</p>
+     */
+    public static TierDefinition naming(final TierDefinition tier, final ResourceLocation upgrade, final ResourceLocation downgrade) {
+        return new TierDefinition(
+                tier.id(), tier.domain(), tier.schemaVersion(), tier.displayRarity(), tier.sortOrder(),
+                tier.upgradeIngredient(), tier.downgradeIngredient(), tier.previousTier(), tier.sourcePack(),
+                tier.attributeMultipliers(), tier.curiosSetBonuses(), tier.compatAmplifiers(),
+                tier.generatedUpgradeTemplate(), tier.generatedDowngradeTemplate(),
+                Optional.of(upgrade), Optional.of(downgrade),
+                tier.upgradeTemplateTexture(), tier.downgradeTemplateTexture());
+    }
+
     public static TierEdge edge(final String from, final String to, final TierDomain domain, final int registrationOrder,
                                 final Optional<IngredientMatcher> addition, final Optional<ResourceLocation> downgradeTo,
                                 final Optional<String> displayBranchId) {

@@ -63,12 +63,13 @@ class TieredEchoesDataReloaderTest {
     // ---------------------------------------------------------------- templates
 
     /**
-     * The template files were collapsed to one upgrade and one downgrade per tier. A datapack
-     * written against the older per-domain layout still carries a {@code domain} key, and reading it
-     * back as an error would break every one of those packs for no benefit.
+     * A template is named rather than located, so a file written against the older layout — which
+     * said which tier and direction it belonged to — still parses and still resolves. Its id was
+     * already the name a tier looks up by convention, which is what keeps those packs working
+     * without a migration step.
      */
     @Test
-    void templateParsingIgnoresALegacyDomainKey() {
+    void templateParsingIgnoresTheKeysTheStandaloneFormatDropped() {
         final TemplateDefinition template = TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
                 {
                   "id": "tieredechoes:rare_upgrade_template",
@@ -79,37 +80,47 @@ class TieredEchoesDataReloaderTest {
                 }
                 """));
 
-        assertEquals(new ResourceLocation("tieredechoes", "rare"), template.tier());
-        assertFalse(template.downgrade());
+        assertEquals(new ResourceLocation("tieredechoes", "rare_upgrade_template"), template.id());
         assertEquals(Optional.of(new ResourceLocation("tieredechoes", "rare_upgrade_template")), template.item());
-    }
-
-    @Test
-    void templateKindDefaultsToUpgradeAndAcceptsBothSpellingsCaseInsensitively() {
-        final TemplateDefinition implicit = TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
-                {"tier":"tieredechoes:common"}
-                """));
-        final TemplateDefinition shouted = TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
-                {"tier":"tieredechoes:common","kind":"DOWNGRADE"}
-                """));
-
-        assertFalse(implicit.downgrade());
-        assertTrue(shouted.downgrade());
+        assertTrue(template.itemModelOverride().isEmpty());
+        assertTrue(template.textureOverride().isEmpty());
     }
 
     @Test
     void templateIdFallsBackToTheResourceItCameFrom() {
         final TemplateDefinition template = TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
-                {"tier":"tieredechoes:common"}
+                {}
                 """));
 
         assertEquals(SOURCE, template.id());
     }
 
+    /** The overrides belong to the template now, whatever direction any tier spends it in. */
     @Test
-    void templateKindIsAllowedToBeWrongOnlyIfItIsRejectedLoudly() {
-        assertThrows(IllegalArgumentException.class, () -> TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
-                {"tier":"tieredechoes:common","kind":"sideways"}
+    void templateParsingReadsTheOverridesItSupports() {
+        final TemplateDefinition template = TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
+                {
+                  "id": "tieredechoes:magic_upgrade_template",
+                  "item": "minecraft:nether_star",
+                  "item_model_override": "tieredechoes:models/item/magic_template",
+                  "texture_override": "tieredechoes:textures/item/magic_template"
+                }
+                """));
+
+        assertEquals(Optional.of(new ResourceLocation("tieredechoes", "models/item/magic_template")),
+                template.itemModelOverride());
+        assertEquals(Optional.of(new ResourceLocation("tieredechoes", "textures/item/magic_template")),
+                template.textureOverride());
+    }
+
+    /**
+     * Everything else about the shape is optional, so the id is the one thing a file can get wrong
+     * in a way that has no answer to fall back on.
+     */
+    @Test
+    void templateParsingRejectsAnIdThatIsNotAResourceLocation() {
+        assertThrows(RuntimeException.class, () -> TieredEchoesDataReloader.parseTemplate(SOURCE, json("""
+                {"id":"rare upgrade template"}
                 """)));
     }
 
@@ -274,7 +285,7 @@ class TieredEchoesDataReloaderTest {
         assertTrue(merged.tierSystem(), "the unstated ones must keep the default");
         assertTrue(merged.levellingSystem());
         assertTrue(merged.levelUp());
-        assertTrue(merged.downgrades());
+        assertFalse(merged.downgrades(), "the way down defaults off, and this file did not say otherwise");
         assertEquals(0, report.issues().size(), "a modern policy file should produce no findings");
     }
 
@@ -505,7 +516,8 @@ class TieredEchoesDataReloaderTest {
                   "compat_amplifiers":{"apotheosis:affix":2.0},
                   "generated_upgrade_template":false,
                   "generated_downgrade_template":true,
-                  "upgrade_template_item_model":"tieredechoes:models/item/x",
+                  "upgrade_template":"test:magic_upgrade_template",
+                  "downgrade_template":"test:magic_downgrade_template",
                   "downgrade_template_texture":"tieredechoes:textures/item/y"
                 }
                 """));
@@ -523,7 +535,9 @@ class TieredEchoesDataReloaderTest {
         assertEquals(2.0D, tier.compatAmplifiers().get("apotheosis:affix"));
         assertFalse(tier.generatedUpgradeTemplate());
         assertTrue(tier.generatedDowngradeTemplate());
-        assertTrue(tier.upgradeTemplateId().isPresent());
+        assertEquals(Optional.of(new ResourceLocation("test", "magic_upgrade_template")), tier.upgradeTemplateId(),
+                "the key names a template, by template id");
+        assertEquals(Optional.of(new ResourceLocation("test", "magic_downgrade_template")), tier.downgradeTemplateId());
         assertTrue(tier.downgradeTemplateTexture().isPresent());
         assertEquals(Optional.of("testpack"), tier.sourcePack());
     }
@@ -542,6 +556,8 @@ class TieredEchoesDataReloaderTest {
         assertTrue(tier.attributeMultipliers().isEmpty());
         assertTrue(tier.generatedUpgradeTemplate());
         assertTrue(tier.generatedDowngradeTemplate());
+        assertTrue(tier.upgradeTemplateId().isEmpty(), "naming no template means spending the conventional one");
+        assertTrue(tier.downgradeTemplateId().isEmpty());
     }
 
     @Test

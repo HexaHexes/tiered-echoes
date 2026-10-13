@@ -16,14 +16,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TierPolicyTest {
 
     @Test
-    void defaultsLeaveEverythingRunning() {
+    void defaultsOpenEveryRouteExceptTheWayDown() {
         final TierPolicy defaults = TierPolicy.defaults();
 
         assertTrue(defaults.tierSystem());
         assertTrue(defaults.tierUpgrades());
         assertTrue(defaults.levellingSystem());
         assertTrue(defaults.levelUp());
-        assertTrue(defaults.downgrades());
+        assertFalse(defaults.downgrades(),
+                "the way down is opt-in; a pack that declares a route has to ask for it to be published");
+        assertFalse(defaults.downgradesPublished());
     }
 
     @Test

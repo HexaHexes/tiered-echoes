@@ -13,7 +13,9 @@ import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
 import org.bitwisemadness.tieredechoes.common.path.PathService;
 import org.bitwisemadness.tieredechoes.common.path.TierEdge;
 import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
+import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
 import org.bitwisemadness.tieredechoes.common.recipe.TierBootstrapRecipe;
+import org.bitwisemadness.tieredechoes.common.recipe.TierDowngradeRecipe;
 import org.bitwisemadness.tieredechoes.common.recipe.TierUpgradeRecipe;
 import org.bitwisemadness.tieredechoes.common.registry.TieredEchoesTagKeys;
 import org.bitwisemadness.tieredechoes.common.template.TemplateService;
@@ -74,10 +76,12 @@ public final class TierRecipeGenerator {
         }
         final List<Recipe<?>> generated = new ArrayList<>();
         final TierService tiers = TierService.getInstance();
-        // Downgrades are not generated at all right now — the way down is disabled pending a rework,
-        // so publishing recipes for it would advertise a transition the menu cannot perform. The
-        // serializer stays registered so a datapack that writes one by hand still loads.
-        final boolean publishUpgrades = PolicyService.getInstance().get().upgradesPublished();
+        final TierPolicy policy = PolicyService.getInstance().get();
+        // Both routes are published only while their own switch allows it, and only while the tier
+        // system is on: a recipe for a system the game refuses to read would let a player take a
+        // transition that goes nowhere.
+        final boolean publishUpgrades = policy.upgradesPublished();
+        final boolean publishDowngrades = policy.downgradesPublished();
         if (publishUpgrades) {
             for (final TierDomain domain : TierDomain.builtinDomains()) {
                 addBootstrap(generated, report, domain);
@@ -92,6 +96,13 @@ public final class TierRecipeGenerator {
             }
             if (publishUpgrades) {
                 addUpgrade(generated, report, edge, source.get(), target.get());
+            }
+            if (publishDowngrades) {
+                // The way down is a property of the edge that came up: only an edge that says where
+                // it lands downwards produces one, so a ladder that declares no route ships none.
+                edge.downgradeTo()
+                        .flatMap(downgradeTo -> tiers.getTier(downgradeTo, edge.domain()))
+                        .ifPresent(downgradeTarget -> addDowngrade(generated, report, edge, target.get(), downgradeTarget));
             }
         }
         inject(recipeManager, generated);
@@ -169,13 +180,54 @@ public final class TierRecipeGenerator {
     }
 
     /**
-     * Downgrade recipes are not generated.
+     * The downward half of an edge, generated only where the pack says which way down it means.
      *
-     * <p>The way down is disabled pending a rework. {@code TierDowngradeRecipe} and its serializer
-     * are both still here and a datapack can still declare one by hand — what is gone is the code
-     * that derived them from the path graph, because an unreachable private helper is a worse thing
-     * to leave behind than a documented gap.</p>
+     * <p>The template names the tier being left behind — the rung the item is standing on — so a
+     * "rare downgrade template" is what a player spends to leave rare behind. That is the same rung
+     * the way up names, so the two directions out of a rung are bought with that rung's two
+     * templates rather than with the ones belonging to wherever they land.</p>
+     *
+     * <p>{@code target} is where the route lands: the edge's {@code downgrade_to}. It need not be
+     * the rung the upgrade came from, because a fork's long way back need not mirror the way up.</p>
      */
+    private static void addDowngrade(final List<Recipe<?>> out, final ValidationReport report,
+                                     final TierEdge edge, final TierDefinition current, final TierDefinition target) {
+        final Ingredient template = templateItem(current, true).map(Ingredient::of).orElse(null);
+        if (template == null) {
+            report.add(missingTemplate(edge, current, true));
+            return;
+        }
+        final Ingredient addition = downgradeAdditionFor(edge, current);
+        if (addition.isEmpty()) {
+            report.add(new ValidationIssue(ValidationIssue.Severity.WARNING, "missing_downgrade_addition",
+                    "Edge declares no addition and the tier it leaves has no downgrade ingredient; no smithing recipe was generated.",
+                    Map.of("edge", edge.from() + "->" + edge.to(), "domain", edge.domain().getSerializedName())));
+            return;
+        }
+        final Ingredient base = baseIngredient(edge.domain());
+        if (base.isEmpty()) {
+            report.add(new ValidationIssue(ValidationIssue.Severity.WARNING, "missing_domain_base_tag",
+                    "No smithing base tag is registered for this domain; no smithing recipe was generated.",
+                    Map.of("edge", edge.from() + "->" + edge.to(), "domain", edge.domain().getSerializedName())));
+            return;
+        }
+        out.add(new TierDowngradeRecipe(
+                recipeId(DOWNGRADE_PREFIX, edge.domain(), edge.to(), target.id()),
+                template, base, addition,
+                edge.domain(), edge.to(), target.id()));
+    }
+
+    /**
+     * The edge's own addition first, so the way down can cost what the way up did; the tier being
+     * left behind's downgrade ingredient is the fallback, for packs that want a different price.
+     */
+    private static Ingredient downgradeAdditionFor(final TierEdge edge, final TierDefinition current) {
+        final Optional<IngredientMatcher> declared = edge.additionIngredient()
+                .or(current::downgradeIngredient);
+        return declared.map(IngredientMatcher::toIngredient).orElse(Ingredient.EMPTY);
+    }
+
+    /** Reports an edge whose recipe cannot be generated because the tier names no template item. */
     private static ValidationIssue missingTemplate(final TierEdge edge, final TierDefinition tier, final boolean downgrade) {
         return new ValidationIssue(ValidationIssue.Severity.WARNING, "missing_smithing_template",
                 "No template item is registered for this tier; no smithing recipe was generated. Register one named "

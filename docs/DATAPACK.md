@@ -7,7 +7,7 @@ Everything progression-related in Tiered Echoes is data. Drop files into a datap
 | --- | --- |
 | `tiers/` | One JSON file per tier, grouped by domain. |
 | `tier_paths/` | The transition graph — which tiers lead where, and what each transition consumes. |
-| `tier_templates/` | Which item occupies the smithing template slot for a tier. |
+| `tier_templates/` | Which item occupies the smithing template slot, for whichever tier names it. |
 | `tier_policies/` | Progression rules for the whole pack. |
 
 The mod ships its own ladder in `data/tieredechoes/…`, and it is just files — there is no fallback
@@ -50,13 +50,13 @@ datapacks produce a warning naming the loser.
 | `display_rarity` | no | Vanilla `Rarity` name, plus `LEGENDARY`, which the mod adds above `EPIC`. Defaults to `COMMON`. An unrecognised name reads as `COMMON` rather than failing the reload. |
 | `sort_order` | no | Ladder position within the domain. Defaults to `0`. |
 | `upgrade_ingredient` | no | Fallback smithing addition when the path edge declares none. |
-| `downgrade_ingredient` | no | Addition used by the downgrade route out of this tier. Parsed, but no downgrade route is generated while `downgrades` is off. |
+| `downgrade_ingredient` | no | Addition used by the downgrade route out of this tier, when the edge leaves the price to the rung. Only read for a route that exists — see `downgrade_to`. |
 | `previous_tier` | no | Informational back-link; the path graph is what actually drives transitions. |
 | `attribute_multipliers` | no | Attribute name → multiplier. Any attribute name is accepted. Also carries `durability`, which is not an attribute but scales the item's maximum durability the same way. |
 | `curios_set_bonuses` | no | Curios set size → multiplier, e.g. `*2` for wearing two pieces. No accessory ladder ships, so this is empty in the built-in files. |
 | `compat_amplifiers` | no | `*<n>`-style key → multiplier for a compat-mod attribute. |
 | `generated_upgrade_template` / `generated_downgrade_template` | no | Whether the conventional `<tier>_*_template` items exist. Both default to `true`. The shipped data sets `generated_downgrade_template` to `false`, because no downgrade item is registered. |
-| `upgrade_template_item_model` / `downgrade_template_item_model` | no | Override the template item's model. |
+| `upgrade_template` / `downgrade_template` | no | Which template this rung spends in each direction, named by template id. Absent, the conventional `<tier>_*_template` item is spent instead, which is all the shipped data does. |
 | `upgrade_template_texture` / `downgrade_template_texture` | no | Override the template item's texture. |
 
 ### The `LEGENDARY` rarity
@@ -122,13 +122,21 @@ file is rejected with a `path_domain_unresolvable` error otherwise.
 | `from` / `to` | The tiers this edge connects. |
 | `display_branch_id` | Identifier quoted in diagnostics when a branch is in play. Defaults to a derivation from the two tier ids. |
 | `addition` | The smithing addition for this transition. Falls back to the `to` tier's `upgrade_ingredient`. |
-| `downgrade_to` | Where a downgrade from `to` lands. |
+| `downgrade_to` | Where a downgrade from `to` lands. Absent, and the edge generates no route down. |
 
 Multiple edges sharing a `from` are **branching**: each becomes its own smithing recipe, and the
 recipe the player picks at the smithing table is what chooses the route. The graph holds nothing
 that would choose for them — no selection is recorded on an item, and there is no rule deciding
 between two routes. A fork is therefore described by the edges alone, and which branch a player
 takes is the one they put the materials in for.
+
+Because the recipe is the choice, two routes out of one rung have to differ in what the table asks
+for: the template names the branch, the addition prices it. Two edges leaving the same rung that
+resolve to the same template **and** the same addition describe one transition twice — the table
+matches whichever it finds first, and the other can never be taken — so that is reported as an
+`ambiguous_branch_selection` error. The way down is checked the same way, from the rung being left:
+every route down out of a rung spends that rung's own downgrade template, so two of them need
+different additions to stay distinct.
 
 Two fields are recognised but no longer read, and both are reported so a pack knows what to change:
 
@@ -138,43 +146,50 @@ Two fields are recognised but no longer read, and both are reported so a pack kn
   no longer prices a transition in experience, and the addition comes from `addition` or the target
   tier.
 
-`downgrade_to` still parses and still resolves during validation, but no downgrade recipe is
-generated from it while the `downgrades` switch is off — which is the default.
+A `downgrade_to` generates a recipe when the `downgrades` switch is on, which it is not by default:
+the way down is opt-in, so declaring one is a statement of intent and publishing it still takes the
+switch. A route also needs something to spend on it, which is what the next section is about.
 
 ## `tier_templates/<template>.json`
 
-A tier's templates are keyed by tier plus direction rather than by domain — the template items were
-never domain-specific — so a sword and a pickaxe of the same tier spend the same template. Files are
-therefore flat, not grouped by domain.
+A template is a named entity of its own. Nothing in the file says which tier spends it or which
+direction it serves: a tier names the template it wants, the same declaration can serve every tier
+and every domain that names it, and the branch a fork offers is told apart by which template it
+asks for. Files are therefore flat, not grouped by domain — a sword and a pickaxe of the same tier
+spend the same template.
 
 ```json
 {
   "schema_version": 1,
-  "id": "tieredechoes:rare_upgrade_template",
-  "tier": "tieredechoes:rare",
-  "kind": "upgrade",
-  "item": "tieredechoes:rare_upgrade_template"
+  "id": "tieredechoes:magic_upgrade_template",
+  "item": "minecraft:nether_star"
 }
 ```
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `id` | no | Defaults to the file's resource id. |
-| `tier` | yes | Which tier this template belongs to. |
-| `kind` | no | `upgrade` or `downgrade`. Defaults to `upgrade`. |
-| `item` | no | What the smithing template slot consumes. |
-| `upgrade_template_item_model` / `downgrade_template_item_model` | no | Model override. |
-| `upgrade_template_texture` / `downgrade_template_texture` | no | Texture override. |
+| `id` | no | Defaults to the file's resource id. This is the name a tier refers to. |
+| `item` | no | What the smithing template slot consumes. Absent, the declaration's own id names the item instead. |
+| `item_model_override` | no | Model override. |
+| `texture_override` | no | Texture override. |
 
-Declaring `item` lets a datapack add tiers without registering Java items. Without a declaration
-the built-in `<tier>_upgrade_template` item is used when it exists.
+A tier selects a template with `upgrade_template` / `downgrade_template`, naming the `id` above.
+Two rungs naming one declaration share it, and a rung can point at an id with no declaration behind
+it at all — that id is then read as an item directly, which is how `upgrade_template` can name an
+item a pack has already registered without a file to go with it.
 
-Only upgrade templates are registered, because downgrades are disabled pending a rework — a
-`kind: "downgrade"` declaration still loads and still resolves to whatever `item` it names, but the
-mod ships no downgrade item for a pack to fall back on.
+Declaring `item` lets a datapack add tiers without registering Java items. A tier that names
+nothing spends the conventional `<tier>_upgrade_template` item instead, and the shipped declarations
+exist so that naming nothing and naming the built-in template are the same thing by construction.
 
-Data files written against the old per-domain layout still load: a leftover `"domain"` key is
-simply not read.
+Only upgrade templates are registered. The way down is opt-in — a pack that declares a
+`downgrade_to` also declares the template to spend on it, and the mod ships no downgrade item to
+fall back on.
+
+Data files written against the older layouts still load and still resolve. A leftover `"domain"`
+key is not read, and neither are `"tier"` or `"kind"`, which said where a template belonged rather
+than what it was called: those ids were already `<tier>_<direction>_template`, which is exactly the
+id a tier looks up when it names nothing.
 
 ## `tier_policies/<file>.json`
 
@@ -202,7 +217,7 @@ item — it never erases it, so flipping it back on recovers exactly what was th
 | `tier_upgrades` | `true` | Whether the smithing upgrade route is published. Off, and no upgrade recipes are generated — but items keep the rungs they already reached. |
 | `levelling_system` | `true` | Whether items carry a level. |
 | `level_up` | `true` | Whether an item may gain a level. An item can hold a level it earned while this was on. |
-| `downgrades` | `false` | Whether the smithing downgrade route is published. Off by default, because no downgrade recipe is generated from `downgrade_to` yet. |
+| `downgrades` | `false` | Whether the smithing downgrade route is published. Off by default, so the way down has to be asked for twice: a pack declares a `downgrade_to` and turns this on. |
 
 Note that `tier_upgrades` alone does not publish anything: the route is only generated when both
 `tier_system` and `tier_upgrades` are on. Publishing a recipe for a system the game refuses to read
@@ -320,6 +335,7 @@ Generated ids name the transition the recipe performs:
 ```
 tieredechoes:tier_upgrade/<domain>/<from>_to_<to>
 tieredechoes:tier_upgrade/<domain>/untiered_to_<to>
+tieredechoes:tier_downgrade/<domain>/<to>_to_<downgrade_to>
 ```
 
 The second form is the **bootstrap recipe**: the step onto the ladder, one per domain, taken from
@@ -328,11 +344,18 @@ value exists so the recipe can cross the network, and its real test is inverted,
 the base has no rung recorded at all. That is what stops an untiered sword from re-running it once it
 has a tier, and what stops a common one from running it in the first place.
 
-`tieredechoes:tier_downgrade` is not generated while downgrades are disabled, but the type is still
-registered, so a hand-written recipe of that type loads and is usable exactly as before.
+The third is the **downgrade recipe**, generated for an edge that declares a `downgrade_to` and only
+while the `downgrades` switch is on. Its `source_tier` is the rung being left and its `target_tier`
+is where the route lands, so the id says what the recipe does in both directions. Its template is
+the downgrade template named by the rung being left — the same rung the upgrade into it was bought
+with — and its addition is the edge's, falling back to that rung's `downgrade_ingredient`.
+
+`tieredechoes:tier_downgrade` is generated from the path graph like the others, and the type is
+still registered on its own, so a hand-written recipe of that type loads and is usable exactly as
+before.
 
 Only hand-write these if you want a transition the path graph does not describe; ids under
-`tier_upgrade/` are owned by the generator and are replaced on each reload.
+`tier_upgrade/` and `tier_downgrade/` are owned by the generator and are replaced on each reload.
 
 ## Validation
 

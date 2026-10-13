@@ -41,8 +41,16 @@ public record TierPolicy(
         boolean downgrades
 ) {
 
+    /**
+     * Every switch on but the way down, which is opt-in.
+     *
+     * <p>A ladder ships no downgrade route unless its pack declares one, so leaving the switch on
+     * would make that declaration mean nothing — and a pack that declares a route plainly wants it
+     * published. Defaulting it off instead puts the decision where it belongs: on the operator who
+     * would rather the smithing table only ever went up.</p>
+     */
     public static TierPolicy defaults() {
-        return new TierPolicy(true, true, true, true, true);
+        return new TierPolicy(true, true, true, true, false);
     }
 
     /**

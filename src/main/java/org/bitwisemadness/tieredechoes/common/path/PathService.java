@@ -4,6 +4,8 @@ import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.tieredechoes.api.common.IPathService;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
+import org.bitwisemadness.tieredechoes.common.template.TemplateService;
+import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierKey;
@@ -76,6 +78,7 @@ public final class PathService implements IPathService {
             }
         }
         reportDuplicateBranchIds(report);
+        reportAmbiguousBranchSelection(report, tierService);
         reportUnreachableTiers(tierService, report);
         return report;
     }
@@ -127,6 +130,91 @@ public final class PathService implements IPathService {
                 ));
             }
         }
+    }
+
+    /**
+     * Reports two routes the smithing table cannot tell apart, one direction at a time.
+     *
+     * <p>A branch is chosen by what the player puts beside the item: the template names the branch,
+     * the addition prices it. Two routes that agree on both therefore describe one transition
+     * twice — the table matches whichever it finds first, and the other becomes unreachable with
+     * nothing in the pack saying so. That is a different failure from a repeated branch id, which
+     * is about how the two <em>render</em> rather than about whether a player can tell them apart
+     * at the table at all.</p>
+     *
+     * <p>Going up, the routes compared are those leaving a rung. Going down, those arriving at one —
+     * because the downgrade template every one of them spends is named by the rung being left
+     * behind, which is the same rung for all of them, leaving the addition as the only thing left
+     * to tell them apart.</p>
+     *
+     * <p>Templates are compared as names rather than as items because that is what this can reach:
+     * the registry that turns a name into an item exists only inside a running game, and two names
+     * that agree before it are the same slot after it.</p>
+     */
+    private void reportAmbiguousBranchSelection(final ValidationReport report, final TierService tierService) {
+        this.reportAmbiguousBranches(report, tierService, false);
+        this.reportAmbiguousBranches(report, tierService, true);
+    }
+
+    private void reportAmbiguousBranches(final ValidationReport report, final TierService tierService, final boolean downgrade) {
+        final Map<TierKey, List<TierEdge>> bySource = new LinkedHashMap<>();
+        for (final TierEdge edge : this.getAllEdgesLike()) {
+            // An edge with no downgrade_to generates no route down, so it cannot be one of a pair.
+            if (downgrade && edge.downgradeTo().isEmpty()) {
+                continue;
+            }
+            bySource.computeIfAbsent(new TierKey(edge.domain(), downgrade ? edge.to() : edge.from()), ignored -> new ArrayList<>()).add(edge);
+        }
+        for (final Map.Entry<TierKey, List<TierEdge>> entry : bySource.entrySet()) {
+            final List<TierEdge> branches = entry.getValue();
+            for (int first = 0; first < branches.size(); first++) {
+                final Optional<BranchKey> chosen = this.resolveBranch(branches.get(first), tierService, downgrade);
+                if (chosen.isEmpty()) {
+                    // Dangling endpoint, already reported as missing_target_tier; pairing two of
+                    // those would blame the ambiguity on the tier that is not there.
+                    continue;
+                }
+                for (int second = first + 1; second < branches.size(); second++) {
+                    if (!chosen.equals(this.resolveBranch(branches.get(second), tierService, downgrade))) {
+                        continue;
+                    }
+                    report.add(new ValidationIssue(
+                            ValidationIssue.Severity.ERROR,
+                            "ambiguous_branch_selection",
+                            "Two routes ask for the same template and the same addition, so the smithing table cannot tell them apart and one of them can never be taken.",
+                            Map.of(
+                                    "domain", entry.getKey().domain().getSerializedName(),
+                                    "from", entry.getKey().id().toString(),
+                                    "first", branches.get(first).from() + "->" + branches.get(first).to(),
+                                    "second", branches.get(second).from() + "->" + branches.get(second).to()
+                            )
+                    ));
+                }
+            }
+        }
+    }
+
+    /**
+     * What the smithing table is offered for one route: the template, and the addition beside it.
+     *
+     * <p>Both directions name their template from the same rung — {@code edge.to()} is the rung
+     * being entered going up and the rung being left going down — so only the ingredient each
+     * direction falls back to differs. Empty when no recipe would be generated at all, whether
+     * because the endpoint is missing or because there is nothing to put in the addition slot:
+     * a route that does not exist cannot be one of a pair that cannot be told apart.</p>
+     */
+    private Optional<BranchKey> resolveBranch(final TierEdge edge, final TierService tierService, final boolean downgrade) {
+        final TemplateService templates = TemplateService.getInstance();
+        return tierService.getTier(edge.to(), edge.domain())
+                .flatMap(target -> edge.additionIngredient()
+                        .or(() -> downgrade ? target.downgradeIngredient() : Optional.of(target.upgradeIngredient()))
+                        .map(addition -> new BranchKey(
+                                templates.candidateFor(templates.referenceFor(target, downgrade)),
+                                addition)));
+    }
+
+    /** The pair a player actually chooses by: which template goes in, and what accompanies it. */
+    private record BranchKey(ResourceLocation template, IngredientMatcher addition) {
     }
 
     @Override

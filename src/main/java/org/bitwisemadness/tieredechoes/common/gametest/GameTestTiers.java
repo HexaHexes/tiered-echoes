@@ -35,6 +35,23 @@ final class GameTestTiers {
         return tier.get();
     }
 
+    /**
+     * The loaded rung re-pointed at the named templates instead of the conventional ones.
+     *
+     * <p>Records have no setter, and every other field of a rung is irrelevant to which template it
+     * spends, so building the copy here keeps the test that needs it about templates rather than
+     * about nineteen {@code Optional.empty()} arguments.</p>
+     */
+    static TierDefinition naming(final TierDefinition tier, final ResourceLocation upgrade, final ResourceLocation downgrade) {
+        return new TierDefinition(
+                tier.id(), tier.domain(), tier.schemaVersion(), tier.displayRarity(), tier.sortOrder(),
+                tier.upgradeIngredient(), tier.downgradeIngredient(), tier.previousTier(), tier.sourcePack(),
+                tier.attributeMultipliers(), tier.curiosSetBonuses(), tier.compatAmplifiers(),
+                tier.generatedUpgradeTemplate(), tier.generatedDowngradeTemplate(),
+                Optional.of(upgrade), Optional.of(downgrade),
+                tier.upgradeTemplateTexture(), tier.downgradeTemplateTexture());
+    }
+
     /** A freshly placed iron sword carrying the given tier and nothing else. */
     static ItemStack tieredSword(final GameTestHelper helper, final String path) {
         final ItemStack stack = new ItemStack(Items.IRON_SWORD);

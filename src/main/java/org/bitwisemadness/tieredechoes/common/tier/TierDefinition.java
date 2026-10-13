@@ -34,8 +34,8 @@ import java.util.Optional;
  * @param compatAmplifiers      per-mod scaling
  * @param generatedUpgradeTemplate whether the upgrade template item was auto-generated
  * @param generatedDowngradeTemplate whether the downgrade template item was auto-generated
- * @param upgradeTemplateId     an optional override for the upgrade template's id (namespaced, domain-independent)
- * @param downgradeTemplateId   an optional override for the downgrade template's id (namespaced, domain-independent)
+ * @param upgradeTemplateId     the template this rung names for the way up, by template id
+ * @param downgradeTemplateId   the template this rung names for the way down, by template id
  * @param upgradeTemplateTexture an optional override for the upgrade template's texture
  * @param downgradeTemplateTexture an optional override for the downgrade template's texture
  */
