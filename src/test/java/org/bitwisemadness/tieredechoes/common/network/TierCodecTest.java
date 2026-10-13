@@ -3,6 +3,8 @@ package org.bitwisemadness.tieredechoes.common.network;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Rarity;
+import org.bitwisemadness.tieredechoes.common.level.LevelConfig;
+import org.bitwisemadness.tieredechoes.common.level.LevelCurve;
 import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
 import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
@@ -149,5 +151,36 @@ class TierCodecTest {
 
         assertEquals(allOff, TierCodec.readPolicy(first));
         assertEquals(undeclared, TierCodec.readPolicy(second));
+    }
+
+    /** The cap and both curves, field for field — a swapped curve would change what levels cost. */
+    @Test
+    void levelConfigSurvivesAWriteReadCycle() {
+        final LevelConfig original = new LevelConfig(40,
+                LevelCurve.exponential(7.5D, 1.5D), LevelCurve.polynomial(0.03D, 2.0D));
+        final FriendlyByteBuf buf = buffer();
+
+        TierCodec.writeLevelConfig(buf, original);
+
+        assertEquals(original, TierCodec.readLevelConfig(buf));
+    }
+
+    /**
+     * A curve whose parameters make no sense is rejected at decode rather than adopted, the same
+     * way an implausible tier count is: what arrives must not be able to paint NaN into every
+     * scaled attribute on the client.
+     */
+    @Test
+    void levelConfigRejectsACurveCarryingNonFiniteParameters() {
+        final FriendlyByteBuf buf = buffer();
+        buf.writeVarInt(10);
+        buf.writeEnum(LevelCurve.Kind.POLYNOMIAL);
+        buf.writeDouble(Double.NaN);
+        buf.writeDouble(3.0D);
+        buf.writeEnum(LevelCurve.Kind.LINEAR);
+        buf.writeDouble(0.02D);
+        buf.writeDouble(1.0D);
+
+        assertThrows(IllegalArgumentException.class, () -> TierCodec.readLevelConfig(buf));
     }
 }
