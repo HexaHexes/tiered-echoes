@@ -107,3 +107,9 @@ Minecraft 1.20.1 and Forge 47 or newer. No other mods are required.
 ## License
 
 LGPL-2.1. See [LICENSE](https://github.com/HexaHexes/tiered-echoes/blob/main/LICENSE).
+
+## AI disclosure
+
+Parts of this project were written with the assistance of AI coding tools.
+AI-assisted code, data and documentation ship only after human review by the
+maintainers.
