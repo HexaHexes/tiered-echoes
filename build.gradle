@@ -190,15 +190,36 @@ tasks.named('jar', Jar).configure {
     finalizedBy 'reobfJar'
 }
 
+// Every repo in the org publishes its artifact to the org's GitHub Packages
+// Maven registry for alpha, beta and stable releases (see agents/AGENTS.md):
+// release.yml cuts the GitHub release, publish.yml runs on "release published"
+// and drives this block. Credentials come from the workflow token in CI; a
+// local publish can supply gpr.user / gpr.key in ~/.gradle/gradle.properties.
+// This ForgeGradle build publishes the jar artifact directly, as before.
 publishing {
     publications {
         register('mavenJava', MavenPublication) {
             artifact jar
+            artifactId = mod_id
+            pom {
+                name = mod_name
+                description = mod_description
+                licenses {
+                    license {
+                        name = mod_license
+                    }
+                }
+            }
         }
     }
     repositories {
         maven {
-            url "file://${project.projectDir}/mcmodsrepo"
+            name = 'GitHubPackages'
+            url = uri('https://maven.pkg.github.com/HexaHexes/tiered-echoes')
+            credentials {
+                username = System.getenv('GITHUB_ACTOR') ?: project.findProperty('gpr.user')
+                password = System.getenv('GITHUB_TOKEN') ?: project.findProperty('gpr.key')
+            }
         }
     }
 }
