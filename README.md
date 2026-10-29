@@ -68,13 +68,13 @@ stops new upgrades being offered; an item already sitting on `legendary` stays t
 
 ## Included
 
-Three domains ship a complete ladder — `weapon`, `tool` and `armor` — each carrying the five
+Three domains ship a complete ladder (`weapon`, `tool` and `armor`), each carrying the five
 rungs above, an upgrade template apiece, and a base tag for modded gear to join. Membership of a
 domain is decided by that tag and nothing else.
 
 The domain list is longer than the shipped one. `shield`, `ranged_weapons`, `elytra` and
-`accessory` remain fully supported as datapack targets — their constants, their tag paths and
-their parsing are all intact — but the mod ships no ladder and no creative tab for them, because
+`accessory` remain fully supported as datapack targets. Their constants, their tag paths and
+their parsing are all intact, but the mod ships no ladder and no creative tab for them, because
 those items scale durability and nothing else in vanilla. A pack that wants to give a modded bow
 real attributes writes the ladder itself.
 
@@ -93,7 +93,7 @@ you can copy and edit; see [docs/DATAPACK.md](https://github.com/HexaHexes/tiere
 
 Modded items become tierable by adding them to the base tag for their domain:
 `#tieredechoes:weapons`, `#tieredechoes:tools` and `#tieredechoes:armor`. The tag is the whole of
-the rule — an item in two tags climbs two ladders. The shield, ranged, elytra and accessory tags
+the rule. An item in two tags climbs two ladders. The shield, ranged, elytra and accessory tags
 resolve too, so declaring a ladder for one of them is purely a data change.
 
 Pacing starts in `tier_policies`, which a world can override one switch at a time with the
