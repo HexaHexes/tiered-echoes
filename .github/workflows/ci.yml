@@ -1,34 +1,21 @@
 name: CI
 
-# Three checks back the branch protection rulesets (junit, gametest,
-# version-bump): PRs cannot merge without them. The version-bump job also runs
-# on workflow_dispatch because GitHub deliberately runs no workflows for a pull
-# request raised by the default GITHUB_TOKEN - a PR it opens would otherwise sit
-# with no checks at all, and with required status checks, no way to merge but
-# admin. Its guard falls back to the default branch when there is no
-# pull_request context, so a dispatch validates exactly what the pull_request
-# run would have.
-#
-# This template is self-contained, so both build checks run from a clean
-# checkout. Mod repos derived from it resolve their dependencies through
-# CurseMaven coordinates (never gitignored libs/ or testmods/ folders) - keep
-# it that way or CI cannot run.
-#
-# The junit job also carries a datapack drift gate: where a repo commits
-# generated output at src/generated/resources, runData must reproduce it
-# byte-identically and the jar must ship every file. It activates on that
-# directory's presence, so this template and non-datagen derivatives skip
-# with a notice (see issue #20).
-
 on:
   pull_request:
+  # version-bump.yml dispatches this on the bump branch. GitHub deliberately
+  # runs no workflows for a pull_request raised by the default GITHUB_TOKEN, so
+  # a PR it opens would otherwise sit with no checks at all - and with required
+  # status checks, no way to merge but admin. The version-bump job below falls
+  # back to the default branch when there is no pull_request context, so a
+  # dispatch validates exactly what the pull_request run would have.
   workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
+  # A workflow_dispatch has no pull_request.number. Falling back to the run id
+  # keeps manual runs from sharing a group - and so cancelling each other.
   group: ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
@@ -39,11 +26,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up JDK 21
+      - name: Set up JDK 17
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '17'
           cache: gradle
 
       - name: Build and run JUnit suite
@@ -160,11 +147,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up JDK 21
+      - name: Set up JDK 17
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '17'
           cache: gradle
 
       # The exit code of this task is NOT a reliable pass signal. A run that
@@ -179,9 +166,9 @@ jobs:
 
       - name: Assert GameTests ran and passed
         run: |
-          # The server prints "All 0 required tests passed :)" when the tree
-          # carries no GameTests at all, so matching the phrase alone lets this
-          # check pass while verifying nothing. The count is what makes it real.
+          # Forge prints "All 0 required tests passed :)" when the tree carries
+          # no GameTests at all, so matching the phrase alone lets this check
+          # pass while verifying nothing. The count is what makes it real.
           LINE=$(grep -E "All [0-9]+ required tests passed" gametest.log || true)
 
           if [ -z "$LINE" ]; then
@@ -255,52 +242,17 @@ jobs:
   version-bump:
     name: version-bump
     runs-on: ubuntu-latest
-
-    # Label creation is issue-scoped, so this one job asks for more than the
-    # workflow's read-only default. Everything it already does stays read; the only
-    # write is the label below.
-    permissions:
-      contents: read
-      pull-requests: read
-      issues: write
-
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Ensure the breaking label exists
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          # The PR template tells authors to apply the `breaking` label and the
-          # magnitude rule below reads merged PRs by it, but labels live per
-          # repository and nothing created them - so the query could only ever come
-          # back empty and a breaking change could ship in a patch release with CI
-          # green. Creating it here means every repo running this workflow carries
-          # the label without anyone having clicked it into existence.
-          #
-          # Only created when missing, so a label someone has recoloured or
-          # re-described is left alone. A fork PR runs with a read-only token and
-          # cannot create it: warn loudly rather than fail the check, because a red
-          # required check would block the whole external contribution.
-          if gh label view breaking --repo "$REPO" >/dev/null 2>&1; then
-            echo "breaking label already present in $REPO."
-            exit 0
-          fi
-
-          if gh label create breaking --repo "$REPO" --color b60205 \
-               --description "Breaking change: the next clean bump must raise major or minor"; then
-            echo "created the breaking label in $REPO."
-          else
-            echo "::warning::Could not create the 'breaking' label - a fork PR has a read-only token. Add it by hand, or re-run from a branch in this repo."
-          fi
-
       - name: Enforce version bump rules
         env:
+          # Falls back to the default branch and the checked-out commit when
+          # this is a workflow_dispatch. Both spell the same comparison the
+          # pull_request run makes, so a dispatch cannot pass a bump that the
+          # real check would have rejected.
           BASE: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
@@ -321,10 +273,18 @@ jobs:
             exit 0
           fi
 
+          # A version line moved. Work out which suffix it carries.
           case "$NEW_VERSION" in
-            *-alpha*|*-Alpha*|*-ALPHA*) CHANNEL="alpha" ;;
-            *-*) CHANNEL="beta" ;;
-            *) CHANNEL="stable" ;;
+            *-alpha*|*-Alpha*|*-ALPHA*)
+              CHANNEL="alpha"
+              ;;
+            *-*)
+              # Any other pre-release suffix (-beta, -rc, ...) needs isolation.
+              CHANNEL="beta"
+              ;;
+            *)
+              CHANNEL="stable"
+              ;;
           esac
 
           echo "detected channel: $CHANNEL"
@@ -334,6 +294,8 @@ jobs:
             exit 0
           fi
 
+          # Beta and stable releases must be pure version bumps. Anything else
+          # in the PR makes the release ambiguous to reviewers.
           EXTRA=$(echo "$CHANGED" | grep -v '^gradle\.properties$' | grep -v '^$' || true)
           if [ -n "$EXTRA" ]; then
             echo "::error::A $CHANNEL version bump must change gradle.properties and nothing else."
@@ -362,7 +324,7 @@ jobs:
 
           case "$NEW_VERSION" in
             *-*) SUFFIXED="yes" ;;
-            *)   SUFFIXED="no" ;;
+            *)   SUFFIXED="no"  ;;
           esac
 
           if [ "$SUFFIXED" = "yes" ]; then
@@ -370,6 +332,9 @@ jobs:
             exit 0
           fi
 
+          # Find the last stable tag: vX.Y.Z with no pre-release and no build
+          # metadata. That is the baseline the compatibility contract is read
+          # against.
           BASELINE=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
 
           if [ -z "$BASELINE" ]; then
