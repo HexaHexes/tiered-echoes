@@ -18,14 +18,14 @@ package org.bitwisemadness.tieredechoes.common.policy;
  * tiers readable while closing the smithing route, and a world that forbids downgrades is not the
  * same as a world that has never heard of them.</p>
  *
+ * <p>{@code levelling_system} and {@code level_up} govern the Level system — a per-item experience
+ * ladder whose curves live in the {@code levels} block of these same files. The two systems are
+ * independent: a level belongs to the item rather than to a ladder, so switching one system off
+ * leaves the other's state exactly where it was.</p>
+ *
  * <p>Every switch can be overridden per world by a tri-state gamerule; see
  * {@link org.bitwisemadness.tieredechoes.common.gamerule.TEGameRules}. What gameplay reads is the
  * resolved value, held by {@link PolicyService}.</p>
- *
- * <p>{@code levelling_system} and {@code level_up} are parsed, synced and honoured from the moment
- * they are declared, but the Level system they govern does not exist yet. They are shipped now so
- * the schema and the gamerule set do not change twice; a pack that sets them early is simply
- * setting a switch nothing reads yet.</p>
  *
  * @param tierSystem     whether tiered items carry a tier at all
  * @param tierUpgrades   whether the smithing upgrade route is published

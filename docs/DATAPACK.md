@@ -200,11 +200,19 @@ id a tier looks up when it names nothing.
   "tier_upgrades": true,
   "levelling_system": true,
   "level_up": true,
-  "downgrades": false
+  "downgrades": false,
+  "levels": {
+    "max_level": 10,
+    "experience": { "kind": "polynomial", "coefficient": 25, "exponent": 3 },
+    "attribute": { "kind": "linear", "coefficient": 0.02, "exponent": 1 }
+  }
 }
 ```
 
-Files merge onto the defaults, so a two-line datapack can flip one switch.
+Files merge onto the defaults, so a two-line datapack can flip one switch — and the `levels` block
+merges the same way, field by field and curve by curve: a file that only restates `max_level`
+leaves both curves alone, and an `experience` object that names only an `exponent` inherits the
+running curve's kind and coefficient.
 
 Every field is a boolean, and the five of them answer two different questions. A **system** switch
 says whether that system exists at all; a **progression** switch says whether something may be
@@ -222,6 +230,62 @@ item — it never erases it, so flipping it back on recovers exactly what was th
 Note that `tier_upgrades` alone does not publish anything: the route is only generated when both
 `tier_system` and `tier_upgrades` are on. Publishing a recipe for a system the game refuses to read
 would let a player take a transition that goes nowhere.
+
+### The `levels` block
+
+A tier is what a smithing recipe made an item; a **level** is what using it did. Levels are a
+separate per-item ladder: every item holding a rung earns experience from using it, and each level
+adds a small fraction on top of whatever multipliers its tier already declares. An axe climbs both
+the weapon and the tool ladder, but it has one level, because it is one axe.
+
+```json
+{
+  "levels": {
+    "max_level": 10,
+    "experience": { "kind": "polynomial", "coefficient": 25, "exponent": 3 },
+    "attribute": { "kind": "linear", "coefficient": 0.02, "exponent": 1 }
+  }
+}
+```
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `max_level` | `10` | The highest level an item may reach. At least 1. An item whose stored level exceeds a lowered cap reads as the cap. |
+| `experience` | polynomial 25, 3 | What advancing costs. The step from `n-1` to `n` costs `coefficient · n^exponent` (polynomial) or `coefficient · exponent^n` (exponential). |
+| `attribute` | linear 0.02 | What advancing pays, as a fraction of the tier's own bonus. |
+
+The attribute curve is wrapped into the level's factor:
+
+```
+effective = 1 + (tierMultiplier − 1) × levelFactor
+```
+
+with `levelFactor = 1 + coefficient · (level − 1)` for a linear curve or
+`1 + coefficient · (level − 1)^exponent` for a polynomial one. Level 1 is always factor 1.0, so an
+item presents exactly as its tier describes it the moment the smithing upgrade lands — and so
+switching the levelling system off, which makes every item read as level 1, can never make an item
+weaker. The factor is applied once per item after its ladders have been resolved to one multiplier,
+so attributes, durability and anything reading through the tier API all agree.
+
+Which kinds each slot accepts:
+
+| Slot | `polynomial` | `exponential` | `linear` |
+| --- | --- | --- | --- |
+| `experience` | yes | yes | no — a linear cost would eventually round to zero, and an item cannot be short of nothing |
+| `attribute` | yes | no | yes |
+
+An unusable curve — an unknown kind, a kind the slot rejects, a non-positive parameter — is
+reported as an `invalid_level_curve` warning and the running curve for that slot stands, so one bad
+field never takes the rest of the block with it.
+
+Under the shipped defaults: level 2 costs 200 and level 10 costs 25 000, about 75 600 experience
+from a fresh item to the cap; each level is worth 2% of the tier's bonus, so ten levels are worth a
+fraction of a smithing step rather than a second one.
+
+Experience is banked by using the item — landing hits and breaking blocks with it (+1), killing
+with it (+5), and being hurt while wearing or holding it (+1 per armour, chest and off-hand slot).
+Smithing never touches a level: the two systems progress independently. At the cap an item neither
+gains nor stores; there is no next level to be short of.
 
 ### Overriding per world: the gamerules
 
@@ -256,7 +320,7 @@ file keeps parsing, and reported as warnings so they get deleted — they are no
 | `disable_upgrade_recipes` | Still honoured as an alias: it sets `tier_upgrades` to `false`. Superseded by `tier_upgrades`; if both appear in one file the modern key governs. |
 | `mode` | `AUTO_ONLY` still sets `tier_upgrades` to `false`, which is the surviving half of what it meant. `HYBRID` and `SMITHING_ONLY` both meant the route is open, which is already the default. |
 | `multi_path_resolution` | Ignored. Branch selection is the recipe the player picks, not a rule. |
-| `carry_over_excess_xp` | Ignored. Items no longer earn experience toward a tier. |
+| `carry_over_excess_xp` | Ignored. Items no longer earn experience toward a tier; the Level system keeps its own pool under the `levels` curves. |
 | `consume_attunement_item` | Ignored. Attunement was removed. |
 
 ## Per-world switches at a glance

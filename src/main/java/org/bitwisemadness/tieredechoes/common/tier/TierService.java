@@ -12,6 +12,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import org.bitwisemadness.tieredechoes.api.common.ITierService;
+import org.bitwisemadness.tieredechoes.common.level.LevelService;
 import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
 import org.bitwisemadness.tieredechoes.common.registry.TieredEchoesTagKeys;
 
@@ -277,10 +278,16 @@ public final class TierService implements ITierService {
      * multiplier. Applying whichever one was iterated first would make the answer depend on map
      * order, so the one furthest from {@code 1.0} wins: that is the ladder that actually changed the
      * item, and the other is agreeing it did nothing.</p>
+     *
+     * <p>The item's level is applied here rather than at the callers, so that attributes, durability
+     * and every mod reading through these two methods share one answer: {@code effective = 1 +
+     * (tierMultiplier − 1) × levelFactor}. A level of one — including every item a world with the
+     * levelling system off presents — is a factor of exactly 1.0 and the multiplier comes back
+     * untouched.</p>
      */
     public synchronized Optional<Double> getScalarMultiplier(final ItemStack stack, final String key) {
-        return strongest(this.readAllTiersFromNbt(stack).values(),
-                tier -> this.getScalarMultiplier(tier, key));
+        return applyLevelFactor(stack, strongest(this.readAllTiersFromNbt(stack).values(),
+                tier -> this.getScalarMultiplier(tier, key)));
     }
 
     /**
@@ -288,11 +295,30 @@ public final class TierService implements ITierService {
      *
      * <p>The same reasoning as {@link #getScalarMultiplier(ItemStack, String)}, applied to attributes
      * — a tier's contract states what scales and how, and where two ladders both state it, the one
-     * with an actual effect is the one worth showing.</p>
+     * with an actual effect is the one worth showing. The level's share of the answer is applied
+     * there too, for the same reason.</p>
      */
     public synchronized Optional<Double> getAttributeMultiplier(final ItemStack stack, final Attribute attribute) {
-        return strongest(this.readAllTiersFromNbt(stack).values(),
-                tier -> this.getAttributeMultiplier(tier, attribute));
+        return applyLevelFactor(stack, strongest(this.readAllTiersFromNbt(stack).values(),
+                tier -> this.getAttributeMultiplier(tier, attribute)));
+    }
+
+    /**
+     * Folds the item's level into a resolved tier multiplier.
+     *
+     * <p>Applied after the ladders have been resolved to one number, because the level belongs to
+     * the item rather than to a ladder: an axe at level 5 is 5 on both of its rungs, and splitting
+     * the factor per ladder would ask which ladder the using was for.</p>
+     */
+    private static Optional<Double> applyLevelFactor(final ItemStack stack, final Optional<Double> multiplier) {
+        if (multiplier.isEmpty()) {
+            return multiplier;
+        }
+        final double factor = LevelService.getInstance().levelFactor(stack);
+        if (factor == 1.0D) {
+            return multiplier;
+        }
+        return Optional.of(1.0D + (multiplier.get() - 1.0D) * factor);
     }
 
     private static Optional<Double> strongest(final Collection<TierDefinition> tiers,

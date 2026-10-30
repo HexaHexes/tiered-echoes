@@ -4,6 +4,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
+import org.bitwisemadness.tieredechoes.common.level.LevelConfig;
 import org.bitwisemadness.tieredechoes.common.network.client.TierSyncClientHandler;
 import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
@@ -23,14 +24,20 @@ import java.util.List;
  * obtain those rules: Minecraft 1.20.1 ships no gamerule sync packet, and {@code
  * Level#getGameRules()} on a client returns a locally built default. Sending the resolved value
  * keeps one question with one answer on both sides.</p>
+ *
+ * <p>The level configuration travels last, for the tooltip's sake: the progress line quotes the
+ * next level's cost, and a client computing that from the wrong curves would show a number the
+ * server would never charge.</p>
  */
 public final class TierDataSyncPacket {
     private final List<TierDefinition> tiers;
     private final TierPolicy policy;
+    private final LevelConfig levelConfig;
 
-    public TierDataSyncPacket(final List<TierDefinition> tiers, final TierPolicy policy) {
+    public TierDataSyncPacket(final List<TierDefinition> tiers, final TierPolicy policy, final LevelConfig levelConfig) {
         this.tiers = List.copyOf(tiers);
         this.policy = policy == null ? TierPolicy.defaults() : policy;
+        this.levelConfig = levelConfig == null ? LevelConfig.defaults() : levelConfig;
     }
 
     public List<TierDefinition> tiers() {
@@ -41,18 +48,25 @@ public final class TierDataSyncPacket {
         return this.policy;
     }
 
+    public LevelConfig levelConfig() {
+        return this.levelConfig;
+    }
+
     public static void encode(final TierDataSyncPacket packet, final FriendlyByteBuf buf) {
         TierCodec.writeTiers(buf, packet.tiers);
         TierCodec.writePolicy(buf, packet.policy);
+        TierCodec.writeLevelConfig(buf, packet.levelConfig);
     }
 
     public static TierDataSyncPacket decode(final FriendlyByteBuf buf) {
-        return new TierDataSyncPacket(TierCodec.readTiers(buf), TierCodec.readPolicy(buf));
+        return new TierDataSyncPacket(TierCodec.readTiers(buf), TierCodec.readPolicy(buf),
+                TierCodec.readLevelConfig(buf));
     }
 
     public static void handle(final TierDataSyncPacket packet) {
         // The handler touches client-only state, so it must never be loaded on a dedicated server.
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> TierSyncClientHandler.apply(packet));
-        TieredEchoes.LOGGER.debug("Received tier sync: {} tiers, policy {}", packet.tiers.size(), packet.policy);
+        TieredEchoes.LOGGER.debug("Received tier sync: {} tiers, policy {}, levels {}",
+                packet.tiers.size(), packet.policy, packet.levelConfig);
     }
 }

@@ -6,6 +6,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import org.bitwisemadness.tieredechoes.api.common.IUpgradeService;
+import org.bitwisemadness.tieredechoes.common.level.LevelService;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
@@ -124,6 +125,10 @@ public final class UpgradeService implements IUpgradeService {
             detail.append(" | ").append(entry.getKey().getSerializedName())
                     .append(": tier=").append(entry.getValue().id());
         }
+        // The level is appended whether or not it has moved: the diagnostic's job is to show the
+        // whole state of the item, and "sitting at level one" is an answer worth printing.
+        detail.append(" | level=").append(LevelService.getInstance().getLevel(stack))
+                .append(", xp=").append(LevelService.getInstance().getStoredExperience(stack));
         return Component.literal(detail.toString()).withStyle(ChatFormatting.GRAY);
     }
 

@@ -1,15 +1,22 @@
 package org.bitwisemadness.tieredechoes.common;
 
 import com.google.common.collect.Multimap;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.ItemAttributeModifierEvent;
+import net.minecraftforge.event.entity.player.ItemTooltipEvent;
 import net.minecraftforge.eventbus.api.Event;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
+import org.bitwisemadness.tieredechoes.common.level.LevelService;
+import org.bitwisemadness.tieredechoes.common.level.LevelTooltip;
+import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
 
 import java.lang.reflect.Method;
@@ -176,6 +183,45 @@ public final class CommonForgeEvents {
         final var attrId = net.minecraftforge.registries.ForgeRegistries.ATTRIBUTES.getKey(attribute);
         if (attrId != null && (attrId.getNamespace().contains("ars") || attrId.getNamespace().contains("legendary") || attrId.getNamespace().contains("lso") || attrId.getNamespace().contains("survival"))) {
             TieredEchoes.LOGGER.debug("[CommonForgeEvents] Saw unrecognized modded attribute {} ({}) on {}", attrId, attribute.getDescriptionId(), stack.getItem());
+        }
+    }
+
+    /**
+     * The two lines an item's level adds to its tooltip.
+     *
+     * <p>Only for items that hold a rung, because only those can earn: a fresh item sitting at
+     * level one with an empty bar would advertise a journey it has not been invited on. The
+     * decision is the same one the award path makes — {@code holdsAnyRung} reads the item's own
+     * NBT rather than the tier system's gate, so a world with tiers switched off still shows its
+     * items' levels. The <em>policy</em> gate is the level system's own switch, whose copy arrived
+     * over the sync channel: vanilla gives a client no way to read another world's gamerules.</p>
+     */
+    @Mod.EventBusSubscriber(modid = TieredEchoes.MOD_ID, value = Dist.CLIENT)
+    public static final class ClientTooltips {
+        private ClientTooltips() {
+        }
+
+        @SubscribeEvent
+        public static void onItemTooltip(final ItemTooltipEvent event) {
+            final ItemStack stack = event.getItemStack();
+            final LevelService levels = LevelService.getInstance();
+            if (stack.isEmpty() || !PolicyService.getInstance().get().levellingSystem()) {
+                return;
+            }
+            if (!levels.holdsAnyRung(stack)) {
+                return;
+            }
+            final int level = levels.getLevel(stack);
+            event.getToolTip().add(Component.literal(LevelTooltip.levelLine(level))
+                    .withStyle(ChatFormatting.DARK_AQUA));
+            if (level >= levels.config().maxLevel()) {
+                event.getToolTip().add(Component.literal(LevelTooltip.maxedLine())
+                        .withStyle(ChatFormatting.DARK_GRAY));
+                return;
+            }
+            event.getToolTip().add(Component.literal(LevelTooltip.progressLine(
+                            levels.getStoredExperience(stack), levels.config().experienceToReach(level + 1)))
+                    .withStyle(ChatFormatting.DARK_GRAY));
         }
     }
 }
