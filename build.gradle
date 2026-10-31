@@ -5,7 +5,8 @@ plugins {
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
     id 'org.spongepowered.mixin' version '0.7.38'
     id 'com.github.spotbugs' version '6.5.13'
-    id 'com.diffplug.spotless' version '8.10.4'
+    id 'com.diffplug.spotless' version '8.10.4'
+    id 'checkstyle'
 }
 
 version = mod_version
@@ -262,6 +263,18 @@ tasks.register('generateGameTestStructures', JavaExec) {
 spotbugs {
     effort = com.github.spotbugs.snom.Effort.MAX
     excludeFilter = file('config/spotbugs-exclude.xml')
+}
+checkstyle {
+    toolVersion = '10.21.0'
+    configFile = file('config/checkstyle/checkstyle.xml')
+    maxWarnings = 0
+}
+
+tasks.withType(Checkstyle).configureEach {
+    reports {
+        html.required = true
+        xml.required = true
+    }
 }
 
 spotbugsTest {
