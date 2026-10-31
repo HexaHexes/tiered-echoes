@@ -1,10 +1,5 @@
 package org.bitwisemadness.tieredechoes.common.gametest;
 
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.IntTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.NbtIo;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -16,6 +11,10 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.IntTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtIo;
 
 /**
  * Writes the empty structure templates that this mod's GameTests are named after.
@@ -108,7 +107,10 @@ public final class GameTestStructureGenerator {
         final SortedSet<String> ids = new TreeSet<>();
         final List<Path> sources;
         try (var files = Files.list(packageDir)) {
-            sources = files.filter(path -> path.getFileName().toString().endsWith(".java")).toList();
+            sources = files.filter(path -> {
+                final Path fileName = path.getFileName();
+                return fileName != null && fileName.toString().endsWith(".java");
+            }).toList();
         }
 
         for (final Path source : sources) {

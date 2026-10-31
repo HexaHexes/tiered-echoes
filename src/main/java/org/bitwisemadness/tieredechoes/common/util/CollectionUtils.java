@@ -1,9 +1,9 @@
 package org.bitwisemadness.tieredechoes.common.util;
 
-import lombok.experimental.UtilityClass;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import lombok.experimental.UtilityClass;
 
 @UtilityClass
 public class CollectionUtils {

@@ -1,11 +1,11 @@
 package org.bitwisemadness.tieredechoes.common.data.loader;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The generated recipe ids are the mod's own namespace, and the injector strips them before

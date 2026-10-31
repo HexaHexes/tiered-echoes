@@ -1,20 +1,19 @@
 package org.bitwisemadness.tieredechoes.datagen;
 
-import com.google.common.hash.HashCode;
-import net.minecraft.data.CachedOutput;
-import net.minecraft.data.PackOutput;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.fail;
 
+import com.google.common.hash.HashCode;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.fail;
+import net.minecraft.data.CachedOutput;
+import net.minecraft.data.PackOutput;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * The ladder is authored in {@link ShippedLadder} and committed as JSON by {@code gradlew runData},

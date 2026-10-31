@@ -1,6 +1,12 @@
 package org.bitwisemadness.tieredechoes.common;
 
 import com.google.common.collect.Multimap;
+import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.item.ItemStack;
@@ -11,13 +17,6 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
-
-import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
 
 @Mod.EventBusSubscriber(modid = TieredEchoes.MOD_ID)
 public final class CommonForgeEvents {

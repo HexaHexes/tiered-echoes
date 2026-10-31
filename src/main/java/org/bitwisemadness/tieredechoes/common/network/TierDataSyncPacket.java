@@ -1,5 +1,6 @@
 package org.bitwisemadness.tieredechoes.common.network;
 
+import java.util.List;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
@@ -7,8 +8,6 @@ import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.network.client.TierSyncClientHandler;
 import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
-
-import java.util.List;
 
 /**
  * Server to client payload carrying the tier ladder and the switches that govern it.

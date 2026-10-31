@@ -1,15 +1,8 @@
 package org.bitwisemadness.tieredechoes.common.data.loader;
 
-import net.minecraft.resources.ResourceLocation;
-import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
-import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
-import org.bitwisemadness.tieredechoes.common.path.TierEdge;
-import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
-import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
-import org.bitwisemadness.tieredechoes.common.template.TemplateDefinition;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -20,10 +13,16 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import net.minecraft.resources.ResourceLocation;
+import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
+import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
+import org.bitwisemadness.tieredechoes.common.path.TierEdge;
+import org.bitwisemadness.tieredechoes.common.template.TemplateDefinition;
+import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
+import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * The datapack that ships in {@code src/main/resources} is the mod's public data contract: a broken

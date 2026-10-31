@@ -1,10 +1,10 @@
 package org.bitwisemadness.tieredechoes.common.policy;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Test;
 
 /**
  * The policy record is the switchboard every read site consults, so its derived predicates are

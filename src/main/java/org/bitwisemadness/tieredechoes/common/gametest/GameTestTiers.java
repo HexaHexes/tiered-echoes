@@ -1,5 +1,6 @@
 package org.bitwisemadness.tieredechoes.common.gametest;
 
+import java.util.Optional;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -9,8 +10,6 @@ import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
 import org.bitwisemadness.tieredechoes.common.upgrade.UpgradeService;
-
-import java.util.Optional;
 
 /**
  * Lookups the GameTests share.

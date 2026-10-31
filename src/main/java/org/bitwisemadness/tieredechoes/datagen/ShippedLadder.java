@@ -1,5 +1,10 @@
 package org.bitwisemadness.tieredechoes.datagen;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Rarity;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
@@ -9,12 +14,6 @@ import org.bitwisemadness.tieredechoes.common.template.TemplateDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
-
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 /**
  * The ladder that ships inside the mod jar, as the single place it is described.

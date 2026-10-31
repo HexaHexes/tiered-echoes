@@ -1,5 +1,7 @@
 package org.bitwisemadness.tieredechoes.common.registry;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
@@ -13,13 +15,10 @@ import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.client.creative.CreativePreviewCatalog;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 public final class TECreativeTabs {
     public static final DeferredRegister<CreativeModeTab> TABS =
             DeferredRegister.create(Registries.CREATIVE_MODE_TAB, TieredEchoes.MOD_ID);
-    public static final Map<TierDomain, RegistryObject<CreativeModeTab>> DOMAIN_TABS = new LinkedHashMap<>();
+    static final Map<TierDomain, RegistryObject<CreativeModeTab>> DOMAIN_TABS = new LinkedHashMap<>();
     public static final RegistryObject<CreativeModeTab> TEMPLATES_TAB = registerTemplatesTab();
 
     /**

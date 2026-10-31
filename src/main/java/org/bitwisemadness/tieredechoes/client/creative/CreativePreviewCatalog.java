@@ -1,5 +1,8 @@
 package org.bitwisemadness.tieredechoes.client.creative;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -7,10 +10,6 @@ import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
 import org.bitwisemadness.tieredechoes.common.upgrade.preview.PreviewUpgradeService;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
 
 public final class CreativePreviewCatalog {
     private static final CreativePreviewCatalog INSTANCE = new CreativePreviewCatalog();

@@ -1,11 +1,10 @@
 package org.bitwisemadness.tieredechoes.common.path;
 
+import java.util.Map;
+import java.util.Optional;
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
-
-import java.util.Map;
-import java.util.Optional;
 
 /**
  * One hop between two tiers of one domain.

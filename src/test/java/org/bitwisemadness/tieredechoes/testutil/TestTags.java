@@ -1,5 +1,9 @@
 package org.bitwisemadness.tieredechoes.testutil;
 
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.tags.TagKey;
@@ -7,11 +11,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import org.bitwisemadness.tieredechoes.common.registry.TieredEchoesTagKeys;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
-
-import java.util.ArrayList;
-import java.util.EnumMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Binds items into a domain's item tag, so tests can exercise domain inference the way the game

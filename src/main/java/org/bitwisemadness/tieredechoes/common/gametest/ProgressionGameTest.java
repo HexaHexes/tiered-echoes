@@ -1,5 +1,6 @@
 package org.bitwisemadness.tieredechoes.common.gametest;
 
+import java.util.List;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceLocation;
@@ -13,8 +14,6 @@ import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
 import org.bitwisemadness.tieredechoes.common.upgrade.UpgradeService;
-
-import java.util.List;
 
 /**
  * The ladder and the switches that govern it, as they actually shipped — the unit tests drive a
@@ -92,7 +91,7 @@ public final class ProgressionGameTest {
 
         final String storedBefore = storedRungId(stack);
         try {
-            gamerule(helper, TEGameRules.TIERS.toString(), TEGameRules.FORCE_OFF);
+            gamerule(helper, TEGameRules.tiersRuleName(), TEGameRules.FORCE_OFF);
 
             helper.assertTrue(UpgradeService.getInstance().getCurrentTier(stack, TierDomain.WEAPON).isEmpty(),
                     "forcing the tier system off must make the stored rung unreadable");
@@ -104,7 +103,7 @@ public final class ProgressionGameTest {
         } finally {
             // Restored no matter how the assertions above went: a rule left forced off would turn
             // every later test in this batch red and point at the wrong cause.
-            gamerule(helper, TEGameRules.TIERS.toString(), TEGameRules.FOLLOW_DATAPACK);
+            gamerule(helper, TEGameRules.tiersRuleName(), TEGameRules.FOLLOW_DATAPACK);
         }
 
         helper.assertTrue(UpgradeService.getInstance().getCurrentTier(stack, TierDomain.WEAPON)

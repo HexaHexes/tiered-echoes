@@ -1,10 +1,10 @@
 package org.bitwisemadness.tieredechoes;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Rarity;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Guards the test harness itself rather than any mod behaviour: ForgeGradle does not obviously put

@@ -1,28 +1,27 @@
 package org.bitwisemadness.tieredechoes.common.data.loader;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
-import com.google.gson.JsonParser;
-import net.minecraft.resources.ResourceLocation;
-import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
-import org.bitwisemadness.tieredechoes.common.path.TierEdge;
-import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
-import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
-import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
-import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
-import org.bitwisemadness.tieredechoes.common.template.TemplateDefinition;
-import org.bitwisemadness.tieredechoes.testutil.TestTiers;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import net.minecraft.resources.ResourceLocation;
+import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
+import org.bitwisemadness.tieredechoes.common.path.TierEdge;
+import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
+import org.bitwisemadness.tieredechoes.common.template.TemplateDefinition;
+import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
+import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
+import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
+import org.bitwisemadness.tieredechoes.testutil.TestTiers;
+import org.junit.jupiter.api.Test;
 
 /**
  * The JSON contract, exercised one helper at a time.

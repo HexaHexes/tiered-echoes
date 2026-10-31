@@ -1,8 +1,7 @@
 package org.bitwisemadness.tieredechoes.common.template;
 
-import net.minecraft.resources.ResourceLocation;
-
 import java.util.Optional;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * One named template: the thing a tier puts in the smithing table's template slot.

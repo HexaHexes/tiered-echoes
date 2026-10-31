@@ -1,5 +1,14 @@
 package org.bitwisemadness.tieredechoes.common.path;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.tieredechoes.api.common.IPathService;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
@@ -10,16 +19,6 @@ import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierKey;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 
 /**
  * Graph of tier transitions, keyed by {@link TierKey} so that every domain keeps its own edges.
@@ -33,6 +32,7 @@ public final class PathService implements IPathService {
     private static final PathService INSTANCE = new PathService();
     private final Map<TierKey, List<TierEdge>> outgoingEdges = new LinkedHashMap<>();
     private final Map<TierKey, List<TierEdge>> incomingEdges = new LinkedHashMap<>();
+    private final Object lock = new Object();
 
     private PathService() {
         // Empty until the first datapack reload. The transitions that ship inside the jar are the
@@ -45,42 +45,46 @@ public final class PathService implements IPathService {
         return INSTANCE;
     }
 
-    public synchronized void replaceAll(final Collection<TierEdge> edges) {
-        this.outgoingEdges.clear();
-        this.incomingEdges.clear();
-        final List<TierEdge> sorted = new ArrayList<>(edges);
-        sorted.sort(Comparator.comparingInt(TierEdge::registrationOrder)
-                .thenComparing(edge -> edge.from().toString())
-                .thenComparing(edge -> edge.to().toString()));
-        for (final TierEdge edge : sorted) {
-            final TierKey key = new TierKey(edge.domain(), edge.from());
-            this.outgoingEdges.computeIfAbsent(key, ignored -> new ArrayList<>()).add(edge);
-            this.incomingEdges.computeIfAbsent(new TierKey(edge.domain(), edge.to()), ignored -> new ArrayList<>()).add(edge);
+    public void replaceAll(final Collection<TierEdge> edges) {
+        synchronized (lock) {
+            this.outgoingEdges.clear();
+            this.incomingEdges.clear();
+            final List<TierEdge> sorted = new ArrayList<>(edges);
+            sorted.sort(Comparator.comparingInt(TierEdge::registrationOrder)
+                    .thenComparing(edge -> edge.from().toString())
+                    .thenComparing(edge -> edge.to().toString()));
+            for (final TierEdge edge : sorted) {
+                final TierKey key = new TierKey(edge.domain(), edge.from());
+                this.outgoingEdges.computeIfAbsent(key, ignored -> new ArrayList<>()).add(edge);
+                this.incomingEdges.computeIfAbsent(new TierKey(edge.domain(), edge.to()), ignored -> new ArrayList<>()).add(edge);
+            }
         }
     }
 
-    public synchronized ValidationReport validate(final TierService tierService) {
-        final ValidationReport report = new ValidationReport();
-        final Set<TierKey> tierKeys = new LinkedHashSet<>();
-        for (final TierDefinition tier : tierService.getAllTiers()) {
-            tierKeys.add(TierKey.of(tier));
-        }
-        for (final TierEdge edge : this.getAllEdgesLike()) {
-            if (!tierKeys.contains(new TierKey(edge.domain(), edge.from()))) {
-                report.add(new ValidationIssue(ValidationIssue.Severity.ERROR, "missing_source_tier",
-                        "Missing source tier for edge in domain " + edge.domain().getSerializedName(),
-                        Map.of("from", edge.from().toString(), "to", edge.to().toString(), "domain", edge.domain().getSerializedName())));
+    public ValidationReport validate(final TierService tierService) {
+        synchronized (lock) {
+            final ValidationReport report = new ValidationReport();
+            final Set<TierKey> tierKeys = new LinkedHashSet<>();
+            for (final TierDefinition tier : tierService.getAllTiers()) {
+                tierKeys.add(TierKey.of(tier));
             }
-            if (!tierKeys.contains(new TierKey(edge.domain(), edge.to()))) {
-                report.add(new ValidationIssue(ValidationIssue.Severity.ERROR, "missing_target_tier",
-                        "Missing target tier for edge in domain " + edge.domain().getSerializedName(),
-                        Map.of("from", edge.from().toString(), "to", edge.to().toString(), "domain", edge.domain().getSerializedName())));
+            for (final TierEdge edge : this.getAllEdgesLike()) {
+                if (!tierKeys.contains(new TierKey(edge.domain(), edge.from()))) {
+                    report.add(new ValidationIssue(ValidationIssue.Severity.ERROR, "missing_source_tier",
+                            "Missing source tier for edge in domain " + edge.domain().getSerializedName(),
+                            Map.of("from", edge.from().toString(), "to", edge.to().toString(), "domain", edge.domain().getSerializedName())));
+                }
+                if (!tierKeys.contains(new TierKey(edge.domain(), edge.to()))) {
+                    report.add(new ValidationIssue(ValidationIssue.Severity.ERROR, "missing_target_tier",
+                            "Missing target tier for edge in domain " + edge.domain().getSerializedName(),
+                            Map.of("from", edge.from().toString(), "to", edge.to().toString(), "domain", edge.domain().getSerializedName())));
+                }
             }
+            reportDuplicateBranchIds(report);
+            reportAmbiguousBranchSelection(report, tierService);
+            reportUnreachableTiers(tierService, report);
+            return report;
         }
-        reportDuplicateBranchIds(report);
-        reportAmbiguousBranchSelection(report, tierService);
-        reportUnreachableTiers(tierService, report);
-        return report;
     }
 
     private void reportUnreachableTiers(final TierService tierService, final ValidationReport report) {
@@ -218,25 +222,35 @@ public final class PathService implements IPathService {
     }
 
     @Override
-    public synchronized List<TierEdge> getOutgoingEdges(final ResourceLocation tierId, final TierDomain domain) {
-        return List.copyOf(this.outgoingEdges.getOrDefault(new TierKey(domain, tierId), List.of()));
+    public List<TierEdge> getOutgoingEdges(final ResourceLocation tierId, final TierDomain domain) {
+        synchronized (lock) {
+            return List.copyOf(this.outgoingEdges.getOrDefault(new TierKey(domain, tierId), List.of()));
+        }
     }
 
-    public synchronized List<TierEdge> getIncomingEdges(final ResourceLocation tierId, final TierDomain domain) {
-        return List.copyOf(this.incomingEdges.getOrDefault(new TierKey(domain, tierId), List.of()));
+    public List<TierEdge> getIncomingEdges(final ResourceLocation tierId, final TierDomain domain) {
+        synchronized (lock) {
+            return List.copyOf(this.incomingEdges.getOrDefault(new TierKey(domain, tierId), List.of()));
+        }
     }
 
     @Override
-    public synchronized Optional<TierEdge> getDowngradeEdge(final ResourceLocation tierId, final TierDomain domain) {
-        final List<TierEdge> incoming = this.incomingEdges.getOrDefault(new TierKey(domain, tierId), List.of());
-        return incoming.stream().filter(edge -> edge.downgradeTo().isPresent()).min(Comparator.comparingInt(TierEdge::registrationOrder));
+    public Optional<TierEdge> getDowngradeEdge(final ResourceLocation tierId, final TierDomain domain) {
+        synchronized (lock) {
+            final List<TierEdge> incoming = this.incomingEdges.getOrDefault(new TierKey(domain, tierId), List.of());
+            return incoming.stream().filter(edge -> edge.downgradeTo().isPresent()).min(Comparator.comparingInt(TierEdge::registrationOrder));
+        }
     }
 
-    public synchronized String effectiveBranchId(final TierEdge edge) {
-        return edge.displayBranchId().orElseGet(() -> edge.from() + "->" + edge.to());
+    public String effectiveBranchId(final TierEdge edge) {
+        synchronized (lock) {
+            return edge.displayBranchId().orElseGet(() -> edge.from() + "->" + edge.to());
+        }
     }
 
-    public synchronized List<TierEdge> getAllEdgesLike() {
-        return this.outgoingEdges.values().stream().flatMap(List::stream).toList();
+    public List<TierEdge> getAllEdgesLike() {
+        synchronized (lock) {
+            return this.outgoingEdges.values().stream().flatMap(List::stream).toList();
+        }
     }
 }
