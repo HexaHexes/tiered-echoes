@@ -99,13 +99,9 @@ jobs:
             exit 1
           fi
 
-          # Player-facing notes: what the mod adds and how to install it. Rewrite for
-          # your mod when promoting this file - the README rule about player-facing
-          # text applies here too.
-          NOTES="Tiered Echoes, version $VERSION.
-          Gear that gets better as you use it: weapons, tools and armor gain
-          experience from use and climb from Common to Legendary. See the
-          README."
+          # Release bodies are GitHub-native auto-generated changelogs
+          # (.github/release.yml configures the categories): the notes list the
+          # merged PRs since the previous release. No per-repo promo body.
 
           PRERELEASE=""
           case "$VERSION" in
@@ -114,7 +110,7 @@ jobs:
 
           gh release create "v$VERSION" "$JAR" \
             --title "v$VERSION" \
-            --notes "$NOTES" \
+            --generate-notes \
             $PRERELEASE
 
       # GitHub refuses to cascade workflow runs started by the default
