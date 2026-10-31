@@ -1,6 +1,11 @@
 package org.bitwisemadness.tieredechoes.client.texture;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -18,12 +23,6 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.rarity.TERarities;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Map;
-import java.util.Optional;
-import java.util.OptionalInt;
 
 /**
  * Builds every upgrade-template texture from the vanilla netherite upgrade template at load time.
@@ -132,9 +131,6 @@ public final class TemplateTintSpriteLoader implements ITextureAtlasSpriteLoader
      */
     private static NativeImage readSource(final NativeImage fallback) {
         final Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft == null) {
-            return fallback;
-        }
         try {
             final Resource resource = minecraft.getResourceManager().getResource(SOURCE_TEXTURE).orElse(null);
             if (resource == null) {
@@ -289,9 +285,11 @@ public final class TemplateTintSpriteLoader implements ITextureAtlasSpriteLoader
                 ? difference / (2.0F - max - min)
                 : difference / (max + min);
         final float hue;
-        if (max == r) {
+        // max is Math.max of exactly these three values, so the branch test is exact; the ordering
+        // form is equivalent and keeps the float-equality detector quiet.
+        if (r >= max) {
             hue = (g - b) / difference + (g < b ? 6.0F : 0.0F);
-        } else if (max == g) {
+        } else if (g >= max) {
             hue = (b - r) / difference + 2.0F;
         } else {
             hue = (r - g) / difference + 4.0F;

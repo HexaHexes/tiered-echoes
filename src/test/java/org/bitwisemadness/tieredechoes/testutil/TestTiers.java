@@ -1,14 +1,13 @@
 package org.bitwisemadness.tieredechoes.testutil;
 
+import java.util.Map;
+import java.util.Optional;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Rarity;
 import org.bitwisemadness.tieredechoes.common.path.TierEdge;
 import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
-
-import java.util.Map;
-import java.util.Optional;
 
 /**
  * Small factories for the records the tests build ladders out of.

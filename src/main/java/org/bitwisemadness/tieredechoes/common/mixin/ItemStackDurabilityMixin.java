@@ -1,5 +1,6 @@
 package org.bitwisemadness.tieredechoes.common.mixin;
 
+import java.util.Optional;
 import net.minecraft.world.item.ItemStack;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
@@ -8,8 +9,6 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-
-import java.util.Optional;
 
 /**
  * Scales a stack's maximum durability by its tier.

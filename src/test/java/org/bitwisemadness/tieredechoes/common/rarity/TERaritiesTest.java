@@ -1,11 +1,11 @@
 package org.bitwisemadness.tieredechoes.common.rarity;
 
-import net.minecraft.world.item.Rarity;
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import net.minecraft.world.item.Rarity;
+import org.junit.jupiter.api.Test;
 
 /**
  * The rarity enum can only be extended by Forge's runtime extender, which a plain JVM does not run —

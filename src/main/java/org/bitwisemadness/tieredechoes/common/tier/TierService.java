@@ -1,20 +1,5 @@
 package org.bitwisemadness.tieredechoes.common.tier;
 
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.tags.TagKey;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Rarity;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.ai.attributes.Attribute;
-import net.minecraft.world.entity.ai.attributes.Attributes;
-import org.bitwisemadness.tieredechoes.api.common.ITierService;
-import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
-import org.bitwisemadness.tieredechoes.common.registry.TieredEchoesTagKeys;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -22,10 +7,24 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.Locale;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ai.attributes.Attribute;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.Rarity;
+import org.bitwisemadness.tieredechoes.api.common.ITierService;
+import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
+import org.bitwisemadness.tieredechoes.common.registry.TieredEchoesTagKeys;
 
 public final class TierService implements ITierService {
     private static final TierService INSTANCE = new TierService();
@@ -43,6 +42,7 @@ public final class TierService implements ITierService {
 
     private final Map<TierDomain, List<TierDefinition>> tiersByDomain = new EnumMap<>(TierDomain.class);
     private final Map<TierKey, TierDefinition> tiersByKey = new LinkedHashMap<>();
+    private final Object lock = new Object();
 
     private TierService() {
         // Empty until the first datapack reload. What ships inside the jar is the generated
@@ -55,15 +55,17 @@ public final class TierService implements ITierService {
         return INSTANCE;
     }
 
-    public synchronized void replaceAll(final Collection<TierDefinition> definitions) {
-        this.tiersByDomain.clear();
-        this.tiersByKey.clear();
-        for (final TierDefinition definition : definitions) {
-            this.tiersByKey.put(TierKey.of(definition), definition);
-            this.tiersByDomain.computeIfAbsent(definition.domain(), key -> new ArrayList<>()).add(definition);
-        }
-        for (final List<TierDefinition> values : this.tiersByDomain.values()) {
-            values.sort(Comparator.comparingInt(TierDefinition::sortOrder).thenComparing(def -> def.id().toString()));
+    public void replaceAll(final Collection<TierDefinition> definitions) {
+        synchronized (lock) {
+            this.tiersByDomain.clear();
+            this.tiersByKey.clear();
+            for (final TierDefinition definition : definitions) {
+                this.tiersByKey.put(TierKey.of(definition), definition);
+                this.tiersByDomain.computeIfAbsent(definition.domain(), key -> new ArrayList<>()).add(definition);
+            }
+            for (final List<TierDefinition> values : this.tiersByDomain.values()) {
+                values.sort(Comparator.comparingInt(TierDefinition::sortOrder).thenComparing(def -> def.id().toString()));
+            }
         }
     }
 
@@ -73,31 +75,39 @@ public final class TierService implements ITierService {
      * tag is the whole of it.
      */
     @Override
-    public synchronized List<Item> collectPreviewItems(final TierDomain domain) {
-        return registeredItemsFor(domain);
+    public List<Item> collectPreviewItems(final TierDomain domain) {
+        synchronized (lock) {
+            return registeredItemsFor(domain);
+        }
     }
 
     @Override
-    public synchronized List<TierDefinition> getOrderedValidTiersForItem(final Item item, final TierDomain domain) {
-        if (!this.inferDomains(item).contains(domain)) {
-            return List.of();
+    public List<TierDefinition> getOrderedValidTiersForItem(final Item item, final TierDomain domain) {
+        synchronized (lock) {
+            if (!this.inferDomains(item).contains(domain)) {
+                return List.of();
+            }
+            return this.getOrderedTiers(domain);
         }
-        return this.getOrderedTiers(domain);
     }
 
-    public synchronized List<TierDefinition> getOrderedTiers(final TierDomain domain) {
-        return List.copyOf(this.tiersByDomain.getOrDefault(domain, List.of()));
+    public List<TierDefinition> getOrderedTiers(final TierDomain domain) {
+        synchronized (lock) {
+            return List.copyOf(this.tiersByDomain.getOrDefault(domain, List.of()));
+        }
     }
 
     /**
      * Domain-scoped lookup. This is the only correct way to resolve a tier id, because tier ids are
      * shared across domains.
      */
-    public synchronized Optional<TierDefinition> getTier(final ResourceLocation tierId, final TierDomain domain) {
-        if (tierId == null || domain == null) {
-            return Optional.empty();
+    public Optional<TierDefinition> getTier(final ResourceLocation tierId, final TierDomain domain) {
+        synchronized (lock) {
+            if (tierId == null || domain == null) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(this.tiersByKey.get(new TierKey(domain, tierId)));
         }
-        return Optional.ofNullable(this.tiersByKey.get(new TierKey(domain, tierId)));
     }
 
     /**
@@ -105,21 +115,23 @@ public final class TierService implements ITierService {
      * the id, so it returns empty in that case rather than an arbitrary winner.
      */
     @Override
-    public synchronized Optional<TierDefinition> getTier(final ResourceLocation tierId) {
-        if (tierId == null) {
-            return Optional.empty();
-        }
-        TierDefinition found = null;
-        for (final TierDefinition definition : this.tiersByKey.values()) {
-            if (!definition.id().equals(tierId)) {
-                continue;
-            }
-            if (found != null) {
+    public Optional<TierDefinition> getTier(final ResourceLocation tierId) {
+        synchronized (lock) {
+            if (tierId == null) {
                 return Optional.empty();
             }
-            found = definition;
+            TierDefinition found = null;
+            for (final TierDefinition definition : this.tiersByKey.values()) {
+                if (!definition.id().equals(tierId)) {
+                    continue;
+                }
+                if (found != null) {
+                    return Optional.empty();
+                }
+                found = definition;
+            }
+            return Optional.ofNullable(found);
         }
-        return Optional.ofNullable(found);
     }
 
     /**
@@ -135,26 +147,32 @@ public final class TierService implements ITierService {
      * to join the ladder, which is what puts the bootstrap transition in
      * {@code TierBootstrapRecipe} in reach of a real failure rather than a theoretical one.</p>
      */
-    public synchronized Optional<TierDefinition> getInitialTierForItem(final Item item, final TierDomain preferredDomain) {
-        return Optional.empty();
+    public Optional<TierDefinition> getInitialTierForItem(final Item item, final TierDomain preferredDomain) {
+        synchronized (lock) {
+            return Optional.empty();
+        }
     }
 
-    public synchronized Optional<TierDefinition> getPreviousTier(final TierDefinition tier) {
-        if (tier.previousTier().isPresent()) {
-            return this.getTier(tier.previousTier().get(), tier.domain());
-        }
-        final List<TierDefinition> ordered = this.tiersByDomain.getOrDefault(tier.domain(), List.of());
-        for (int i = 0; i < ordered.size(); i++) {
-            if (ordered.get(i).id().equals(tier.id()) && i > 0) {
-                return Optional.of(ordered.get(i - 1));
+    public Optional<TierDefinition> getPreviousTier(final TierDefinition tier) {
+        synchronized (lock) {
+            if (tier.previousTier().isPresent()) {
+                return this.getTier(tier.previousTier().get(), tier.domain());
             }
+            final List<TierDefinition> ordered = this.tiersByDomain.getOrDefault(tier.domain(), List.of());
+            for (int i = 0; i < ordered.size(); i++) {
+                if (ordered.get(i).id().equals(tier.id()) && i > 0) {
+                    return Optional.of(ordered.get(i - 1));
+                }
+            }
+            return Optional.empty();
         }
-        return Optional.empty();
     }
 
 
-    public synchronized Set<TierDomain> resolveDomains(final Item item) {
-        return this.inferDomains(item);
+    public Set<TierDomain> resolveDomains(final Item item) {
+        synchronized (lock) {
+            return this.inferDomains(item);
+        }
     }
 
     /**
@@ -169,29 +187,33 @@ public final class TierService implements ITierService {
      * <p>Iteration follows enum declaration order so that the result is deterministic. Callers such
      * as {@link #resolveCurrentTier} pick the first element, which must not change between runs.</p>
      */
-    public synchronized Set<TierDomain> inferDomains(final Item item) {
-        if (item == null) {
-            return Set.of();
-        }
-        final Set<TierDomain> domains = new LinkedHashSet<>();
-        for (final TierDomain domain : TierDomain.values()) {
-            final TagKey<Item> tag = TieredEchoesTagKeys.forDomain(domain).orElse(null);
-            if (tag != null && item.builtInRegistryHolder().is(tag)) {
-                domains.add(domain);
+    public Set<TierDomain> inferDomains(final Item item) {
+        synchronized (lock) {
+            if (item == null) {
+                return Set.of();
             }
+            final Set<TierDomain> domains = new LinkedHashSet<>();
+            for (final TierDomain domain : TierDomain.values()) {
+                final TagKey<Item> tag = TieredEchoesTagKeys.forDomain(domain).orElse(null);
+                if (tag != null && item.builtInRegistryHolder().is(tag)) {
+                    domains.add(domain);
+                }
+            }
+            // Set.copyOf would discard the insertion order, so wrap instead.
+            return java.util.Collections.unmodifiableSet(domains);
         }
-        // Set.copyOf would discard the insertion order, so wrap instead.
-        return java.util.Collections.unmodifiableSet(domains);
     }
 
-    public synchronized Map<String, Attribute> getScalableAttributes(final Item item) {
-        final Map<String, Attribute> keys = new LinkedHashMap<>();
-        collectAttributeMap(item, EquipmentSlot.MAINHAND, keys);
-        collectAttributeMap(item, EquipmentSlot.HEAD, keys);
-        collectAttributeMap(item, EquipmentSlot.CHEST, keys);
-        collectAttributeMap(item, EquipmentSlot.LEGS, keys);
-        collectAttributeMap(item, EquipmentSlot.FEET, keys);
-        return Map.copyOf(keys);
+    public Map<String, Attribute> getScalableAttributes(final Item item) {
+        synchronized (lock) {
+            final Map<String, Attribute> keys = new LinkedHashMap<>();
+            collectAttributeMap(item, EquipmentSlot.MAINHAND, keys);
+            collectAttributeMap(item, EquipmentSlot.HEAD, keys);
+            collectAttributeMap(item, EquipmentSlot.CHEST, keys);
+            collectAttributeMap(item, EquipmentSlot.LEGS, keys);
+            collectAttributeMap(item, EquipmentSlot.FEET, keys);
+            return Map.copyOf(keys);
+        }
     }
 
     private void collectAttributeMap(final Item item, final EquipmentSlot slot, final Map<String, Attribute> keys) {
@@ -278,9 +300,11 @@ public final class TierService implements ITierService {
      * order, so the one furthest from {@code 1.0} wins: that is the ladder that actually changed the
      * item, and the other is agreeing it did nothing.</p>
      */
-    public synchronized Optional<Double> getScalarMultiplier(final ItemStack stack, final String key) {
-        return strongest(this.readAllTiersFromNbt(stack).values(),
-                tier -> this.getScalarMultiplier(tier, key));
+    public Optional<Double> getScalarMultiplier(final ItemStack stack, final String key) {
+        synchronized (lock) {
+            return strongest(this.readAllTiersFromNbt(stack).values(),
+                    tier -> this.getScalarMultiplier(tier, key));
+        }
     }
 
     /**
@@ -290,9 +314,11 @@ public final class TierService implements ITierService {
      * — a tier's contract states what scales and how, and where two ladders both state it, the one
      * with an actual effect is the one worth showing.</p>
      */
-    public synchronized Optional<Double> getAttributeMultiplier(final ItemStack stack, final Attribute attribute) {
-        return strongest(this.readAllTiersFromNbt(stack).values(),
-                tier -> this.getAttributeMultiplier(tier, attribute));
+    public Optional<Double> getAttributeMultiplier(final ItemStack stack, final Attribute attribute) {
+        synchronized (lock) {
+            return strongest(this.readAllTiersFromNbt(stack).values(),
+                    tier -> this.getAttributeMultiplier(tier, attribute));
+        }
     }
 
     private static Optional<Double> strongest(final Collection<TierDefinition> tiers,
@@ -366,8 +392,10 @@ public final class TierService implements ITierService {
                 || combined.contains("temperature.resistance");
     }
 
-    public synchronized List<TierDefinition> getAllTiers() {
-        return List.copyOf(this.tiersByKey.values());
+    public List<TierDefinition> getAllTiers() {
+        synchronized (lock) {
+            return List.copyOf(this.tiersByKey.values());
+        }
     }
 
     /**
@@ -379,14 +407,16 @@ public final class TierService implements ITierService {
      * upgrading the item expects to see, and hiding it behind the lower ladder would read as a bug.
      * Ties fall back to domain declaration order, which is stable between runs.</p>
      */
-    public synchronized Optional<TierDefinition> resolveCurrentTier(final ItemStack stack, final TierDomain preferredDomain) {
-        if (preferredDomain != null) {
-            return this.readTierFromNbt(stack, preferredDomain);
+    public Optional<TierDefinition> resolveCurrentTier(final ItemStack stack, final TierDomain preferredDomain) {
+        synchronized (lock) {
+            if (preferredDomain != null) {
+                return this.readTierFromNbt(stack, preferredDomain);
+            }
+            final Map<TierDomain, TierDefinition> stored = this.readAllTiersFromNbt(stack);
+            return stored.isEmpty()
+                    ? Optional.empty()
+                    : stored.values().stream().max(this.displayTierComparator());
         }
-        final Map<TierDomain, TierDefinition> stored = this.readAllTiersFromNbt(stack);
-        return stored.isEmpty()
-                ? Optional.empty()
-                : stored.values().stream().max(this.displayTierComparator());
     }
 
     /**
@@ -408,27 +438,29 @@ public final class TierService implements ITierService {
      * sits on two ladders independently — an axe is a weapon and a tool, and neither rung may stand
      * in for the other.</p>
      */
-    public synchronized Map<TierDomain, TierDefinition> readAllTiersFromNbt(final ItemStack stack) {
-        final LinkedHashMap<TierDomain, TierDefinition> result = new LinkedHashMap<>();
-        final CompoundTag te = stackTe(stack);
-        if (te == null || !te.contains(DOMAINS_TAG)) {
+    public Map<TierDomain, TierDefinition> readAllTiersFromNbt(final ItemStack stack) {
+        synchronized (lock) {
+            final LinkedHashMap<TierDomain, TierDefinition> result = new LinkedHashMap<>();
+            final CompoundTag te = stackTe(stack);
+            if (te == null || !te.contains(DOMAINS_TAG)) {
+                return result;
+            }
+            final CompoundTag domains = te.getCompound(DOMAINS_TAG);
+            for (final String key : domains.getAllKeys()) {
+                final TierDomain domain = TierDomain.byName(key).orElse(null);
+                if (domain == null) {
+                    // A domain a datapack removed, or one written by a newer build. Skipping it leaves
+                    // the rest of the item's ladders intact instead of discarding the whole stack.
+                    continue;
+                }
+                final ResourceLocation tierId = ResourceLocation.tryParse(domains.getCompound(key).getString(TIER_ID_TAG));
+                if (tierId == null) {
+                    continue;
+                }
+                this.getTier(tierId, domain).ifPresent(tier -> result.put(domain, tier));
+            }
             return result;
         }
-        final CompoundTag domains = te.getCompound(DOMAINS_TAG);
-        for (final String key : domains.getAllKeys()) {
-            final TierDomain domain = TierDomain.byName(key).orElse(null);
-            if (domain == null) {
-                // A domain a datapack removed, or one written by a newer build. Skipping it leaves
-                // the rest of the item's ladders intact instead of discarding the whole stack.
-                continue;
-            }
-            final ResourceLocation tierId = ResourceLocation.tryParse(domains.getCompound(key).getString(TIER_ID_TAG));
-            if (tierId == null) {
-                continue;
-            }
-            this.getTier(tierId, domain).ifPresent(tier -> result.put(domain, tier));
-        }
-        return result;
     }
 
     /**
@@ -438,39 +470,43 @@ public final class TierService implements ITierService {
      * item is on, it simply has not been raised to a rung yet. Iteration follows enum declaration
      * order so the result is deterministic.</p>
      */
-    public synchronized List<TierDomain> recordedLadderDomains(final ItemStack stack) {
-        final CompoundTag te = stackTe(stack);
-        if (te == null || !te.contains(DOMAINS_TAG)) {
-            return List.of();
-        }
-        final CompoundTag domains = te.getCompound(DOMAINS_TAG);
-        final List<TierDomain> found = new ArrayList<>();
-        for (final TierDomain domain : TierDomain.values()) {
-            if (domains.contains(domain.getSerializedName())) {
-                found.add(domain);
+    public List<TierDomain> recordedLadderDomains(final ItemStack stack) {
+        synchronized (lock) {
+            final CompoundTag te = stackTe(stack);
+            if (te == null || !te.contains(DOMAINS_TAG)) {
+                return List.of();
             }
+            final CompoundTag domains = te.getCompound(DOMAINS_TAG);
+            final List<TierDomain> found = new ArrayList<>();
+            for (final TierDomain domain : TierDomain.values()) {
+                if (domains.contains(domain.getSerializedName())) {
+                    found.add(domain);
+                }
+            }
+            return List.copyOf(found);
         }
-        return List.copyOf(found);
     }
 
     /**
      * Reads the tier recorded for one specific domain, or empty when that ladder has no rung stored.
      */
-    public synchronized Optional<TierDefinition> readTierFromNbt(final ItemStack stack, final TierDomain domain) {
-        final CompoundTag te = stackTe(stack);
-        if (te == null || !te.contains(DOMAINS_TAG) || domain == null) {
-            return Optional.empty();
+    public Optional<TierDefinition> readTierFromNbt(final ItemStack stack, final TierDomain domain) {
+        synchronized (lock) {
+            final CompoundTag te = stackTe(stack);
+            if (te == null || !te.contains(DOMAINS_TAG) || domain == null) {
+                return Optional.empty();
+            }
+            final String key = domain.getSerializedName();
+            final CompoundTag domains = te.getCompound(DOMAINS_TAG);
+            if (!domains.contains(key)) {
+                return Optional.empty();
+            }
+            final ResourceLocation tierId = ResourceLocation.tryParse(domains.getCompound(key).getString(TIER_ID_TAG));
+            if (tierId == null) {
+                return Optional.empty();
+            }
+            return this.getTier(tierId, domain);
         }
-        final String key = domain.getSerializedName();
-        final CompoundTag domains = te.getCompound(DOMAINS_TAG);
-        if (!domains.contains(key)) {
-            return Optional.empty();
-        }
-        final ResourceLocation tierId = ResourceLocation.tryParse(domains.getCompound(key).getString(TIER_ID_TAG));
-        if (tierId == null) {
-            return Optional.empty();
-        }
-        return this.getTier(tierId, domain);
     }
 
     /**

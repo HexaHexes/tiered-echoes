@@ -1,8 +1,7 @@
 package org.bitwisemadness.tieredechoes.common.tier;
 
-import net.minecraft.nbt.CompoundTag;
-
 import java.util.Optional;
+import net.minecraft.nbt.CompoundTag;
 
 /**
  * Picks which ladder rung an item displays when it holds more than one.

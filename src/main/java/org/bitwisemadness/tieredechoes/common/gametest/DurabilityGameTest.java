@@ -1,5 +1,6 @@
 package org.bitwisemadness.tieredechoes.common.gametest;
 
+import java.util.Set;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.item.ItemStack;
@@ -52,7 +53,8 @@ public final class DurabilityGameTest {
         final ItemStack plain = new ItemStack(Items.SHIELD);
         final int before = plain.getMaxDamage();
         // Touching the registry and the tier service must not disturb an item that carries no tier.
-        TierService.getInstance().inferDomains(Items.SHIELD);
+        final Set<TierDomain> domains = TierService.getInstance().inferDomains(Items.SHIELD);
+        helper.assertTrue(domains.isEmpty(), "a shield must resolve to no domain, got " + domains);
 
         helper.assertTrue(plain.getMaxDamage() == before,
                 "an untiered shield changed durability from " + before + " to " + plain.getMaxDamage());

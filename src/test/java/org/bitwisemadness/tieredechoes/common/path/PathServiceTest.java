@@ -1,5 +1,11 @@
 package org.bitwisemadness.tieredechoes.common.path;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.List;
+import java.util.Optional;
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.tieredechoes.common.data.loader.ShippedDatapack;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
@@ -12,13 +18,6 @@ import org.bitwisemadness.tieredechoes.testutil.TestTiers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PathServiceTest {
 

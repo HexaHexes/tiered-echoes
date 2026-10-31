@@ -1,7 +1,7 @@
 package org.bitwisemadness.tieredechoes.server.command;
 
-import lombok.experimental.UtilityClass;
 import com.mojang.brigadier.CommandDispatcher;
+import lombok.experimental.UtilityClass;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;

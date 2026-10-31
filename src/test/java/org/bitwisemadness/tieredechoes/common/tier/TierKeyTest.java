@@ -1,11 +1,11 @@
 package org.bitwisemadness.tieredechoes.common.tier;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.tieredechoes.testutil.TestTiers;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
  * Tier ids deliberately repeat across domains ({@code tieredechoes:common} exists four times), so

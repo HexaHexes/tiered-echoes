@@ -25,19 +25,19 @@ import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
 public final class TEGameRules {
 
     /** Overrides {@code tier_system}: whether tiered items carry a tier at all. */
-    public static GameRules.Key<GameRules.IntegerValue> TIERS;
+    private static GameRules.Key<GameRules.IntegerValue> TIERS;
 
     /** Overrides {@code tier_upgrades}: whether the smithing upgrade route is published. */
-    public static GameRules.Key<GameRules.IntegerValue> TIER_UPGRADES;
+    private static GameRules.Key<GameRules.IntegerValue> TIER_UPGRADES;
 
     /** Overrides {@code levelling_system}: whether items carry a level at all. */
-    public static GameRules.Key<GameRules.IntegerValue> LEVELS;
+    private static GameRules.Key<GameRules.IntegerValue> LEVELS;
 
     /** Overrides {@code level_up}: whether an item may gain a level. */
-    public static GameRules.Key<GameRules.IntegerValue> LEVEL_UP;
+    private static GameRules.Key<GameRules.IntegerValue> LEVEL_UP;
 
     /** Overrides {@code downgrades}: whether the smithing downgrade route is published. */
-    public static GameRules.Key<GameRules.IntegerValue> DOWNGRADES;
+    private static GameRules.Key<GameRules.IntegerValue> DOWNGRADES;
 
     /** Hand the decision back to {@code tier_policies}. This is what a new world starts on. */
     public static final int FOLLOW_DATAPACK = 0;
@@ -47,6 +47,14 @@ public final class TEGameRules {
 
     /** Force the switch on, whatever the datapack asked for. */
     public static final int FORCE_ON = 2;
+
+    /**
+     * The registered name of {@link #TIERS}, for callers that set the rule through a command
+     * rather than through the key object.
+     */
+    public static String tiersRuleName() {
+        return TIERS.toString();
+    }
 
     private TEGameRules() {
     }

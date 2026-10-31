@@ -1,15 +1,14 @@
 package org.bitwisemadness.tieredechoes.common.registry;
 
+import java.util.EnumMap;
+import java.util.Map;
+import java.util.Optional;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
-
-import java.util.EnumMap;
-import java.util.Map;
-import java.util.Optional;
 
 /**
  * One item tag per {@code TierDomain}, and the only place the domain-to-tag mapping lives.

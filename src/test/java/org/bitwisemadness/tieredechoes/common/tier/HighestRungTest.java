@@ -1,10 +1,10 @@
 package org.bitwisemadness.tieredechoes.common.tier;
 
-import net.minecraft.nbt.CompoundTag;
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import net.minecraft.nbt.CompoundTag;
+import org.junit.jupiter.api.Test;
 
 /**
  * {@link HighestRung} is one rule serving two mixins: the {@code [Tier]} suffix and the name's

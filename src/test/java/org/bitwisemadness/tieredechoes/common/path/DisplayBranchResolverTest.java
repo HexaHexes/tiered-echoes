@@ -1,12 +1,12 @@
 package org.bitwisemadness.tieredechoes.common.path;
 
-import net.minecraft.resources.ResourceLocation;
-import org.bitwisemadness.tieredechoes.testutil.TestTiers;
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import net.minecraft.resources.ResourceLocation;
+import org.bitwisemadness.tieredechoes.testutil.TestTiers;
+import org.junit.jupiter.api.Test;
 
 class DisplayBranchResolverTest {
 

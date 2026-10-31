@@ -1,13 +1,13 @@
 package org.bitwisemadness.tieredechoes;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.bitwisemadness.tieredechoes.testutil.TestBootstrap;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Verifies {@link TestBootstrap} actually initialises registries in a headless JVM.

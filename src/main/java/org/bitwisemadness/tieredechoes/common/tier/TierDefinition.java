@@ -1,11 +1,10 @@
 package org.bitwisemadness.tieredechoes.common.tier;
 
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.Rarity;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Rarity;
 
 /**
  * One rung of one ladder, as {@code tier_policies} declared it.

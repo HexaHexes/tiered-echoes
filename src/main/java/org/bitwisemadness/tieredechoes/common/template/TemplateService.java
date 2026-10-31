@@ -1,18 +1,17 @@
 package org.bitwisemadness.tieredechoes.common.template;
 
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
-import net.minecraftforge.registries.ForgeRegistries;
-import org.bitwisemadness.tieredechoes.TieredEchoes;
-import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
-
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
+import net.minecraftforge.registries.ForgeRegistries;
+import org.bitwisemadness.tieredechoes.TieredEchoes;
+import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 
 /**
  * Resolves which item belongs in the smithing template slot for a given tier.
@@ -29,6 +28,7 @@ public final class TemplateService {
 
 	/** Template id -> declaration, so a tier can select whichever template it wants by name. */
 	private final Map<ResourceLocation, TemplateDefinition> declared = new LinkedHashMap<>();
+	private final Object lock = new Object();
 
 	private TemplateService() {
 	}
@@ -37,10 +37,12 @@ public final class TemplateService {
 		return INSTANCE;
 	}
 
-	public synchronized void replaceAll(final Collection<TemplateDefinition> definitions) {
-		this.declared.clear();
-		for (final TemplateDefinition definition : definitions) {
-			this.declared.put(definition.id(), definition);
+	public void replaceAll(final Collection<TemplateDefinition> definitions) {
+		synchronized (lock) {
+			this.declared.clear();
+			for (final TemplateDefinition definition : definitions) {
+				this.declared.put(definition.id(), definition);
+			}
 		}
 	}
 
@@ -51,21 +53,27 @@ public final class TemplateService {
 	 * also the name of the built-in item — a tier that names nothing still resolves to the template
 	 * the mod ships.</p>
 	 */
-	public synchronized ResourceLocation referenceFor(final TierDefinition tier, final boolean downgrade) {
-		final Optional<ResourceLocation> named = downgrade ? tier.downgradeTemplateId() : tier.upgradeTemplateId();
-		return named.orElseGet(() -> templateId(tier, downgrade));
+	public ResourceLocation referenceFor(final TierDefinition tier, final boolean downgrade) {
+		synchronized (lock) {
+			final Optional<ResourceLocation> named = downgrade ? tier.downgradeTemplateId() : tier.upgradeTemplateId();
+			return named.orElseGet(() -> templateId(tier, downgrade));
+		}
 	}
 
-	public synchronized Optional<TemplateDefinition> template(final TierDefinition tier, final boolean downgrade) {
-		return Optional.ofNullable(this.declared.get(this.referenceFor(tier, downgrade)));
+	public Optional<TemplateDefinition> template(final TierDefinition tier, final boolean downgrade) {
+		synchronized (lock) {
+			return Optional.ofNullable(this.declared.get(this.referenceFor(tier, downgrade)));
+		}
 	}
 
 	/**
 	 * Every declaration currently in force, in insertion order. Exposed so tooling — and the tests
 	 * that pin the one-template-per-tier contract — can see what a datapack actually contributed.
 	 */
-	public synchronized List<TemplateDefinition> declaredTemplates() {
-		return List.copyOf(this.declared.values());
+	public List<TemplateDefinition> declaredTemplates() {
+		synchronized (lock) {
+			return List.copyOf(this.declared.values());
+		}
 	}
 
 	/**
@@ -76,9 +84,11 @@ public final class TemplateService {
 	 * branches that resolve to the same name are the same slot to a player, which is what the
 	 * ambiguity check in {@code PathService} has to be able to see.</p>
 	 */
-	public synchronized ResourceLocation candidateFor(final ResourceLocation reference) {
-		final TemplateDefinition declaration = this.declared.get(reference);
-		return declaration == null ? reference : declaration.item().orElse(reference);
+	public ResourceLocation candidateFor(final ResourceLocation reference) {
+		synchronized (lock) {
+			final TemplateDefinition declaration = this.declared.get(reference);
+			return declaration == null ? reference : declaration.item().orElse(reference);
+		}
 	}
 
 	/**
@@ -86,9 +96,11 @@ public final class TemplateService {
 	 * win; otherwise the built-in {@code <tier>_upgrade_template} / {@code <tier>_downgrade_template}
 	 * items are used when they happen to be registered.
 	 */
-	public synchronized Optional<Item> templateItem(final TierDefinition tier, final boolean downgrade) {
-		final Item item = ForgeRegistries.ITEMS.getValue(this.candidateFor(this.referenceFor(tier, downgrade)));
-		return item == null || item == Items.AIR ? Optional.empty() : Optional.of(item);
+	public Optional<Item> templateItem(final TierDefinition tier, final boolean downgrade) {
+		synchronized (lock) {
+			final Item item = ForgeRegistries.ITEMS.getValue(this.candidateFor(this.referenceFor(tier, downgrade)));
+			return item == null || item == Items.AIR ? Optional.empty() : Optional.of(item);
+		}
 	}
 
 	public ResourceLocation templateId(final TierDefinition tier, final boolean downgrade) {

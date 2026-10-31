@@ -1,10 +1,9 @@
 package org.bitwisemadness.tieredechoes.common.data.validation;
 
-import lombok.Getter;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import lombok.Getter;
 
 public final class ValidationReport {
     @Getter

@@ -1,25 +1,25 @@
 package org.bitwisemadness.tieredechoes.common.data.validation;
 
-import lombok.experimental.UtilityClass;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicReference;
+import lombok.experimental.UtilityClass;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.config.TieredEchoesConfig;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 @UtilityClass
 public class ValidationReporter {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static volatile ValidationReport LAST_REPORT;
+    private static final AtomicReference<ValidationReport> LAST_REPORT = new AtomicReference<>();
 
     public static void log(final ValidationReport report) {
-        LAST_REPORT = report;
+        LAST_REPORT.set(report);
         for (final ValidationIssue issue : report.issues()) {
             switch (issue.severity()) {
                 case INFO -> TieredEchoes.LOGGER.info("[Validation][{}] {} {}", issue.type(), issue.message(), issue.context());
@@ -35,7 +35,7 @@ public class ValidationReporter {
 
 
     public static ValidationReport getLastReport() {
-        return LAST_REPORT;
+        return LAST_REPORT.get();
     }
 
     private static void writeJsonReport(final ValidationReport report) {

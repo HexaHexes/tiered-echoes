@@ -1,5 +1,9 @@
 package org.bitwisemadness.tieredechoes.common.gametest;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -31,11 +35,6 @@ import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.upgrade.UpgradeService;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 /**
  * The smithing contract, exercised against a live {@code RecipeManager}.

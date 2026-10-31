@@ -4,6 +4,15 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Stream;
 import net.minecraft.data.CachedOutput;
 import net.minecraft.data.DataProvider;
 import net.minecraft.data.PackOutput;
@@ -14,16 +23,6 @@ import org.bitwisemadness.tieredechoes.common.template.TemplateDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Stream;
 
 /**
  * Writes the built-in datapack into {@code src/generated/resources}, where it is committed and wired

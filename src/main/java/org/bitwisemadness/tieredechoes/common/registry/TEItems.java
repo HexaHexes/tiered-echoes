@@ -1,5 +1,9 @@
 package org.bitwisemadness.tieredechoes.common.registry;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Rarity;
 import net.minecraftforge.registries.DeferredRegister;
@@ -8,10 +12,6 @@ import net.minecraftforge.registries.RegistryObject;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.item.TieredSmithingTemplateItem;
 import org.bitwisemadness.tieredechoes.common.rarity.TERarities;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 public final class TEItems {
 	public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, TieredEchoes.MOD_ID);
@@ -31,11 +31,21 @@ public final class TEItems {
 			"rare", Rarity.RARE,
 			"epic", Rarity.EPIC
 	);
-	public static final Map<String, RegistryObject<Item>> UPGRADE_TEMPLATES = new LinkedHashMap<>();
+	private static final Map<String, RegistryObject<Item>> UPGRADE_TEMPLATES_BACKEND = new LinkedHashMap<>();
+
+	/**
+	 * Read-only view of the registered templates, keyed by tier id. Callers only read; the
+	 * registration block below is the single writer, so the map cannot be mutated from outside
+	 * this class.
+	 */
+	public static final Map<String, RegistryObject<Item>> UPGRADE_TEMPLATES =
+
+
+		Collections.unmodifiableMap(UPGRADE_TEMPLATES_BACKEND);
 
 	static {
 		for (final String tier : BUILTIN_TIERS) {
-			UPGRADE_TEMPLATES.put(tier, registerTemplate(tier + "_upgrade_template", tier, false, rarityFor(tier)));
+			UPGRADE_TEMPLATES_BACKEND.put(tier, registerTemplate(tier + "_upgrade_template", tier, false, rarityFor(tier)));
 		}
 	}
 

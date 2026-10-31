@@ -1,5 +1,10 @@
 package org.bitwisemadness.tieredechoes.common.network;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.item.Rarity;
 import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
@@ -8,12 +13,6 @@ import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.testutil.TestTiers;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * The whole sync payload as the network layer sees it: the codec writes the ladder, then the

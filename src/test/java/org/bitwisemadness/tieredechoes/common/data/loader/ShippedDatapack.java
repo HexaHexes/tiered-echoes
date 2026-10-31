@@ -2,20 +2,6 @@ package org.bitwisemadness.tieredechoes.common.data.loader;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.GsonHelper;
-import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
-import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
-import org.bitwisemadness.tieredechoes.common.path.PathService;
-import org.bitwisemadness.tieredechoes.common.path.TierEdge;
-import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
-import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
-import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
-import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
-import org.bitwisemadness.tieredechoes.common.tier.TierService;
-import org.bitwisemadness.tieredechoes.common.template.TemplateDefinition;
-import org.bitwisemadness.tieredechoes.common.template.TemplateService;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -27,6 +13,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.GsonHelper;
+import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
+import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
+import org.bitwisemadness.tieredechoes.common.path.PathService;
+import org.bitwisemadness.tieredechoes.common.path.TierEdge;
+import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
+import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
+import org.bitwisemadness.tieredechoes.common.template.TemplateDefinition;
+import org.bitwisemadness.tieredechoes.common.template.TemplateService;
+import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
+import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
+import org.bitwisemadness.tieredechoes.common.tier.TierService;
 
 /**
  * Reads the datapack this repository ships and pushes it through the same parse, domain-resolution

@@ -1,13 +1,12 @@
 package org.bitwisemadness.tieredechoes.common.item;
 
+import java.util.List;
+import java.util.Locale;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Rarity;
 import net.minecraft.world.item.SmithingTemplateItem;
-
-import java.util.List;
-import java.util.Locale;
 
 public class TieredSmithingTemplateItem extends SmithingTemplateItem {
 	private static final Component APPLIES_TO = Component.translatable("item.tieredechoes.smithing_template.applies_to");

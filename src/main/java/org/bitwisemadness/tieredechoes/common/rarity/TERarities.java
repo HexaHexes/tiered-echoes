@@ -1,13 +1,12 @@
 package org.bitwisemadness.tieredechoes.common.rarity;
 
+import java.util.Locale;
+import java.util.Optional;
+import java.util.OptionalInt;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.world.item.Rarity;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
-
-import java.util.Locale;
-import java.util.Optional;
-import java.util.OptionalInt;
 
 /**
  * Adds a {@code LEGENDARY} rarity above {@code EPIC}.
@@ -39,6 +38,7 @@ public final class TERarities {
     public static final int LEGENDARY_COLOR = 0xFFAA00;
 
     private static Rarity legendary;
+    private static final Object LOCK = new Object();
 
     private TERarities() {
     }
@@ -63,26 +63,28 @@ public final class TERarities {
      * constant regardless, and there is no registry to arbitrate; that is Forge's problem rather
      * than ours to solve from here.</p>
      */
-    public static synchronized void register() {
-        if (legendary != null) {
-            return;
-        }
-        final Rarity existing = findExisting(LEGENDARY);
-        if (existing != null) {
-            legendary = existing;
-            final int reusedColour = colourOf(existing).orElse(-1);
-            TieredEchoes.LOGGER.info(
-                    "[TieredEchoes] Rarity {} was already added by another mod; reusing it instead of adding a "
-                            + "second one. Legendary items take that rarity's colour{}.",
-                    LEGENDARY, reusedColour < 0 ? "" : String.format(Locale.ROOT, " #%06X", reusedColour));
-            return;
-        }
-        try {
-            legendary = Rarity.create(LEGENDARY, style -> style.withColor(LEGENDARY_COLOR));
-        } catch (final RuntimeException exception) {
-            // A failed extension is not worth failing the game over — the rarity simply reads as the
-            // fallback, and every tier that asked for it still loads.
-            TieredEchoes.LOGGER.warn("[TieredEchoes] Could not register the {} rarity", LEGENDARY, exception);
+    public static void register() {
+        synchronized (LOCK) {
+            if (legendary != null) {
+                return;
+            }
+            final Rarity existing = findExisting(LEGENDARY);
+            if (existing != null) {
+                legendary = existing;
+                final int reusedColour = colourOf(existing).orElse(-1);
+                TieredEchoes.LOGGER.info(
+                        "[TieredEchoes] Rarity {} was already added by another mod; reusing it instead of adding a "
+                                + "second one. Legendary items take that rarity's colour{}.",
+                        LEGENDARY, reusedColour < 0 ? "" : String.format(Locale.ROOT, " #%06X", reusedColour));
+                return;
+            }
+            try {
+                legendary = Rarity.create(LEGENDARY, style -> style.withColor(LEGENDARY_COLOR));
+            } catch (final RuntimeException exception) {
+                // A failed extension is not worth failing the game over — the rarity simply reads as the
+                // fallback, and every tier that asked for it still loads.
+                TieredEchoes.LOGGER.warn("[TieredEchoes] Could not register the {} rarity", LEGENDARY, exception);
+            }
         }
     }
 

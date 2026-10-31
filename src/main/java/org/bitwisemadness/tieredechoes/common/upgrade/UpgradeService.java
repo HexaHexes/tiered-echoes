@@ -1,5 +1,8 @@
 package org.bitwisemadness.tieredechoes.common.upgrade;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -9,10 +12,6 @@ import org.bitwisemadness.tieredechoes.api.common.IUpgradeService;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 /**
  * Reads and writes the per-domain ladder state carried by an item.

@@ -1,5 +1,7 @@
 package org.bitwisemadness.tieredechoes.common.gametest;
 
+import java.util.List;
+import java.util.Optional;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceLocation;
@@ -12,9 +14,6 @@ import org.bitwisemadness.tieredechoes.common.template.TemplateDefinition;
 import org.bitwisemadness.tieredechoes.common.template.TemplateService;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
-
-import java.util.List;
-import java.util.Optional;
 
 /**
  * {@code TemplateService} resolves template items through {@code ForgeRegistries}, which is only
