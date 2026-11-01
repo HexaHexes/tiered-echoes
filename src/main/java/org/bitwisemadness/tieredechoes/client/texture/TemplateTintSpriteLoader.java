@@ -13,7 +13,6 @@ import net.minecraft.client.resources.metadata.animation.AnimationMetadataSectio
 import net.minecraft.client.resources.metadata.animation.FrameSize;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
-import net.minecraft.world.item.Rarity;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.RegisterTextureAtlasSpriteLoadersEvent;
@@ -100,10 +99,9 @@ public final class TemplateTintSpriteLoader implements ITextureAtlasSpriteLoader
             // Fell back to the stub, so the stub is what the atlas takes ownership of.
             return new SpriteContents(name, frameSize, image, animationMeta, forgeMeta);
         }
-        // The stub is in no returned contents, and nothing above us closes it either:
-        // SpriteLoader#loadSprite drops its reference on the non-null path and hands the image's
-        // lifetime to whatever the loader returned. This close is therefore the only one it gets.
-        // Idempotent, so a Forge that starts closing it too would not double-free.
+        // The stub is in no returned contents and nothing above us closes it: SpriteLoader#loadSprite
+        // drops its reference on the non-null path, so this close is the only one it gets - idempotent,
+        // so a Forge that starts closing it too would not double-free.
         image.close();
         shiftHue(source, LEGENDARY_TIER.equals(tier) ? legendaryTint(source) : declared);
         // Ownership passes to the SpriteContents, which closes what it holds when the atlas is

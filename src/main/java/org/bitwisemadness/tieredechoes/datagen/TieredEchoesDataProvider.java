@@ -3,7 +3,6 @@ package org.bitwisemadness.tieredechoes.datagen;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -60,12 +59,9 @@ public final class TieredEchoesDataProvider implements DataProvider {
 
     @Override
     public CompletableFuture<?> run(final CachedOutput cache) {
-        // Clear what this provider owns before writing, so deleting a tier from ShippedLadder
-        // deletes its file too. A provider that only ever adds would leave the stale JSON behind
-        // forever, and the loader would keep loading it.
-        //
-        // Only the generated directories, though: the tags and GameTest structures are hand-authored
-        // and live in src/main/resources, so nothing here can reach them.
+        // Clear what this provider owns before writing, so deleting a tier from ShippedLadder deletes
+        // its file too - an add-only provider would leave stale JSON the loader keeps loading. Only
+        // the generated directories: the tags and GameTest structures are hand-authored, out of reach.
         for (final String directory : List.of(TIER_DIRECTORY, PATH_DIRECTORY, TEMPLATE_DIRECTORY)) {
             deleteRecursively(this.dataRoot.resolve(directory));
         }
