@@ -10,7 +10,6 @@ import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.tieredechoes.common.data.loader.ShippedDatapack;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationIssue;
 import org.bitwisemadness.tieredechoes.common.data.validation.ValidationReport;
-import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
 import org.bitwisemadness.tieredechoes.testutil.TestBootstrap;

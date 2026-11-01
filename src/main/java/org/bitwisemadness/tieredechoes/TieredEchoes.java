@@ -30,10 +30,9 @@ public final class TieredEchoes {
     public TieredEchoes() {
         final IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
 
-        // Before anything that reads rarities. The template items declare a rarity when they are
-        // built, and DeferredRegister loads that class as soon as it is referenced below — so the
-        // LEGENDARY constant has to exist by then or the legendary template comes out coloured as
-        // its fallback.
+        // Before anything that reads rarities: the template items declare a rarity when they are
+        // built, and DeferredRegister loads that class as soon as it is referenced below — so
+        // LEGENDARY has to exist by then or the legendary template falls back to its colour.
         TERarities.register();
 
         TEItems.ITEMS.register(modBus);

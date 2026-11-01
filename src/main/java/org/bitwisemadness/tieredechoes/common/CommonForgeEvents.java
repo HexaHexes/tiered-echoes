@@ -121,10 +121,9 @@ public final class CommonForgeEvents {
         if (Math.abs(extraAmount) < 1.0E-9D) {
             return null;
         }
-        // The seed includes the multiplier rather than a tier id, because the multiplier is now
-        // resolved across every ladder the item climbs and no single tier owns it. Two different
-        // scale factors still produce two different ids, so a retiered item replaces rather than
-        // accumulates its scaling modifier.
+        // The seed includes the multiplier rather than a tier id: the multiplier is resolved across
+        // every ladder the item climbs and no single tier owns it. Two different scale factors
+        // still produce two different ids, so a retiered item replaces rather than accumulates.
         final UUID id = UUID.nameUUIDFromBytes(("tieredechoes:" + source + ':' + multiplier + ':' + key + ':' + modifier.getId()).getBytes(StandardCharsets.UTF_8));
         return new AttributeModifier(id, modifier.getName() + TIERED_ECHOES_MARKER, extraAmount, modifier.getOperation());
     }
