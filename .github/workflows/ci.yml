@@ -229,7 +229,7 @@ jobs:
           PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
         run: >
-          ./checkstyleMain checkstyleTest
+          ./gradlew checkstyleMain checkstyleTest
           --no-daemon --stacktrace
 
       - name: Spotless check
@@ -245,7 +245,8 @@ jobs:
           name: spotbugs-report
           path: build/reports/spotbugs/
           if-no-files-found: ignore
-          - name: Upload the Checkstyle report
+      - name: Upload the Checkstyle report
+
             if: always()
             uses: actions/upload-artifact@v7
             with:
