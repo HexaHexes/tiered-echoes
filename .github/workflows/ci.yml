@@ -222,6 +222,16 @@ jobs:
 
       # Enforced since #52. Spotless stays out of Gradle `check`
       # (enforceCheck false), so this job is the formatting gate.
+      # Structural rules, not formatting: comment-block length, star/redundant/
+      # unused imports, cyclomatic complexity. Ruleset: config/checkstyle.
+      - name: Checkstyle
+        env:
+          PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
+        run: >
+          ./checkstyleMain checkstyleTest
+          --no-daemon --stacktrace
+
       - name: Spotless check
         env:
           PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
@@ -235,6 +245,13 @@ jobs:
           name: spotbugs-report
           path: build/reports/spotbugs/
           if-no-files-found: ignore
+          - name: Upload the Checkstyle report
+            if: always()
+            uses: actions/upload-artifact@v7
+            with:
+              name: checkstyle-report
+              path: build/reports/checkstyle/
+              if-no-files-found: ignore
 
   version-bump:
     name: version-bump
