@@ -1,8 +1,8 @@
 package org.bitwisemadness.tieredechoes.common.level;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
 
 /**
  * The shipped defaults as a player would meet them, and the arithmetic's behaviour at the edges a

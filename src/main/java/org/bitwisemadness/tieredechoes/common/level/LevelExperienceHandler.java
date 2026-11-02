@@ -1,5 +1,6 @@
 package org.bitwisemadness.tieredechoes.common.level;
 
+import java.util.OptionalInt;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -14,8 +15,6 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.util.PlayerMessageUtil;
-
-import java.util.OptionalInt;
 
 /**
  * Feeds the items a player actually uses.
@@ -68,9 +67,8 @@ public final class LevelExperienceHandler {
             award(player, armor, 1);
         }
         // getArmorSlots() covers only the four armour slots, so the chest slot's non-armour
-        // occupant — an elytra — and the off-hand are read separately. Both are inert until a
-        // datapack puts a rung on one, at which point the ladder they joined needs experience to
-        // climb and this is where it comes from.
+        // occupant — an elytra — and the off-hand are read separately; both stay inert until a
+        // datapack puts a rung on them, at which point the ladder they joined earns experience here.
         award(player, player.getItemBySlot(EquipmentSlot.CHEST), 1);
         award(player, player.getOffhandItem(), 1);
     }

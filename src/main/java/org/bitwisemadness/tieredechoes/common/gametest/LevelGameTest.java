@@ -1,5 +1,6 @@
 package org.bitwisemadness.tieredechoes.common.gametest;
 
+import java.util.OptionalInt;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.MinecraftServer;
@@ -13,8 +14,6 @@ import org.bitwisemadness.tieredechoes.common.level.LevelService;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
-
-import java.util.OptionalInt;
 
 /**
  * The Level system as a player meets it: the shipped curves, the real datapack, and the two
@@ -70,7 +69,7 @@ public final class LevelGameTest {
         LevelService.getInstance().addExperience(sword, 100);
 
         try {
-            gamerule(helper, TEGameRules.LEVEL_UP.toString(), TEGameRules.FORCE_OFF);
+            gamerule(helper, TEGameRules.levelUpKey().toString(), TEGameRules.FORCE_OFF);
 
             helper.assertTrue(LevelService.getInstance().addExperience(sword, 500).isEmpty(),
                     "a frozen route must not accept new experience");
@@ -79,7 +78,7 @@ public final class LevelGameTest {
             helper.assertTrue(LevelService.getInstance().getStoredExperience(sword) == 100,
                     "what was earned stays where it was");
         } finally {
-            gamerule(helper, TEGameRules.LEVEL_UP.toString(), TEGameRules.FOLLOW_DATAPACK);
+            gamerule(helper, TEGameRules.levelUpKey().toString(), TEGameRules.FOLLOW_DATAPACK);
         }
 
         helper.assertTrue(LevelService.getInstance().addExperience(sword, 100).isPresent(),
@@ -99,7 +98,7 @@ public final class LevelGameTest {
                 "the sword should read as level 2 while the switch is at its default");
 
         try {
-            gamerule(helper, TEGameRules.LEVELS.toString(), TEGameRules.FORCE_OFF);
+            gamerule(helper, TEGameRules.levelsKey().toString(), TEGameRules.FORCE_OFF);
 
             helper.assertTrue(LevelService.getInstance().getLevel(sword) == 1,
                     "with the system off, every item reads as level one");
@@ -110,7 +109,7 @@ public final class LevelGameTest {
             helper.assertTrue(storedBefore.equals(storedLevel(sword)),
                     "the level itself must survive the switch, expected " + storedBefore + " but found " + storedLevel(sword));
         } finally {
-            gamerule(helper, TEGameRules.LEVELS.toString(), TEGameRules.FOLLOW_DATAPACK);
+            gamerule(helper, TEGameRules.levelsKey().toString(), TEGameRules.FOLLOW_DATAPACK);
         }
 
         helper.assertTrue(LevelService.getInstance().getLevel(sword) == 2,

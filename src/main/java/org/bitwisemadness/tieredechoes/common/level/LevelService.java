@@ -1,5 +1,6 @@
 package org.bitwisemadness.tieredechoes.common.level;
 
+import java.util.OptionalInt;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -7,8 +8,6 @@ import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
 import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
 import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
-
-import java.util.OptionalInt;
 
 /**
  * Reads and writes the per-item level an item carries.
@@ -30,6 +29,8 @@ import java.util.OptionalInt;
  * lives in this class rather than in the callers so that no read site can forget it.</p>
  */
 public final class LevelService {
+
+    private final Object lock = new Object();
     private static final LevelService INSTANCE = new LevelService();
 
     /**
@@ -55,8 +56,10 @@ public final class LevelService {
         return this.config;
     }
 
-    public synchronized void replaceAll(final LevelConfig config) {
-        this.config = config == null ? LevelConfig.defaults() : config;
+    public void replaceAll(final LevelConfig config) {
+        synchronized (lock) {
+            this.config = config == null ? LevelConfig.defaults() : config;
+        }
     }
 
     /**

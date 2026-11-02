@@ -1,21 +1,5 @@
 package org.bitwisemadness.tieredechoes.common.tier;
 
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.tags.TagKey;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Rarity;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.ai.attributes.Attribute;
-import net.minecraft.world.entity.ai.attributes.Attributes;
-import org.bitwisemadness.tieredechoes.api.common.ITierService;
-import org.bitwisemadness.tieredechoes.common.level.LevelService;
-import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
-import org.bitwisemadness.tieredechoes.common.registry.TieredEchoesTagKeys;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -38,6 +22,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.bitwisemadness.tieredechoes.api.common.ITierService;
+import org.bitwisemadness.tieredechoes.common.level.LevelService;
 import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
 import org.bitwisemadness.tieredechoes.common.registry.TieredEchoesTagKeys;
 
@@ -341,24 +326,24 @@ public final class TierService implements ITierService {
             return applyLevelFactor(stack, strongest(this.readAllTiersFromNbt(stack).values(),
                     tier -> this.getAttributeMultiplier(tier, attribute)));
         }
+    }
 
-        /**
-         * Folds the item's level into a resolved tier multiplier.
-         *
-         * <p>Applied after the ladders have been resolved to one number, because the level belongs to
-         * the item rather than to a ladder: an axe at level 5 is 5 on both of its rungs, and splitting
-         * the factor per ladder would ask which ladder the using was for.</p>
-         */
-        private static Optional<Double> applyLevelFactor(final ItemStack stack, final Optional<Double> multiplier) {
-            if (multiplier.isEmpty()) {
-                return multiplier;
-            }
-            final double factor = LevelService.getInstance().levelFactor(stack);
-            if (factor == 1.0D) {
-                return multiplier;
-            }
-            return Optional.of(1.0D + (multiplier.get() - 1.0D) * factor);
+    /**
+     * Folds the item's level into a resolved tier multiplier.
+     *
+     * <p>Applied after the ladders have been resolved to one number, because the level belongs to
+     * the item rather than to a ladder: an axe at level 5 is 5 on both of its rungs, and splitting
+     * the factor per ladder would ask which ladder the using was for.</p>
+     */
+    private static Optional<Double> applyLevelFactor(final ItemStack stack, final Optional<Double> multiplier) {
+        if (multiplier.isEmpty()) {
+            return multiplier;
         }
+        final double factor = LevelService.getInstance().levelFactor(stack);
+        if (factor == 1.0D) {
+            return multiplier;
+        }
+        return Optional.of(1.0D + (multiplier.get() - 1.0D) * factor);
     }
 
     private static Optional<Double> strongest(final Collection<TierDefinition> tiers,
