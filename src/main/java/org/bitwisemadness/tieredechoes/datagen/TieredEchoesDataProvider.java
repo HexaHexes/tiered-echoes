@@ -18,6 +18,7 @@ import net.minecraft.data.PackOutput;
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.tieredechoes.TieredEchoes;
 import org.bitwisemadness.tieredechoes.common.path.TierEdge;
+import org.bitwisemadness.tieredechoes.common.registry.TieredEchoesTagKeys;
 import org.bitwisemadness.tieredechoes.common.template.TemplateDefinition;
 import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
@@ -28,7 +29,7 @@ import org.bitwisemadness.tieredechoes.common.tier.TierDomain;
  * into the jar as an extra resources source directory.
  *
  * <p>The output must not be {@code src/main/resources}. A Forge data run owns its output directory
- * and wipes whatever it did not just generate, which would take the hand-authored tags, GameTest
+ * and wipes whatever it did not just generate, which would take the hand-authored GameTest
  * structures, assets and {@code mods.toml} with it on every run. Keeping the two directories apart
  * means datagen can only ever damage its own output.</p>
  *
@@ -41,11 +42,13 @@ public final class TieredEchoesDataProvider implements DataProvider {
     private static final String PATH_DIRECTORY = "tier_paths";
     private static final String TEMPLATE_DIRECTORY = "tier_templates";
     private static final String RECIPE_DIRECTORY = "recipes";
+    private static final String TAG_DIRECTORY = "tags/items";
 
     private final PackOutput.PathProvider tiers;
     private final PackOutput.PathProvider paths;
     private final PackOutput.PathProvider templates;
     private final PackOutput.PathProvider recipes;
+    private final PackOutput.PathProvider tags;
     private final Path dataRoot;
 
     public TieredEchoesDataProvider(final PackOutput output) {
@@ -53,6 +56,7 @@ public final class TieredEchoesDataProvider implements DataProvider {
         this.paths = output.createPathProvider(PackOutput.Target.DATA_PACK, PATH_DIRECTORY);
         this.templates = output.createPathProvider(PackOutput.Target.DATA_PACK, TEMPLATE_DIRECTORY);
         this.recipes = output.createPathProvider(PackOutput.Target.DATA_PACK, RECIPE_DIRECTORY);
+        this.tags = output.createPathProvider(PackOutput.Target.DATA_PACK, TAG_DIRECTORY);
         this.dataRoot = output.getOutputFolder(PackOutput.Target.DATA_PACK)
                 .resolve(TieredEchoes.MOD_ID);
     }
@@ -61,8 +65,8 @@ public final class TieredEchoesDataProvider implements DataProvider {
     public CompletableFuture<?> run(final CachedOutput cache) {
         // Clear what this provider owns before writing, so deleting a tier from ShippedLadder deletes
         // its file too - an add-only provider would leave stale JSON the loader keeps loading. Only
-        // the generated directories: the tags and GameTest structures are hand-authored, out of reach.
-        for (final String directory : List.of(TIER_DIRECTORY, PATH_DIRECTORY, TEMPLATE_DIRECTORY)) {
+        // the generated directories: the GameTest structures are hand-authored, out of reach.
+        for (final String directory : List.of(TIER_DIRECTORY, PATH_DIRECTORY, TEMPLATE_DIRECTORY, TAG_DIRECTORY)) {
             deleteRecursively(this.dataRoot.resolve(directory));
         }
         deleteRecursively(this.dataRoot.resolve(RECIPE_DIRECTORY).resolve("templates"));
@@ -89,6 +93,16 @@ public final class TieredEchoesDataProvider implements DataProvider {
         }
         for (final ShippedLadder.TemplateCraftingRecipe recipe : ShippedLadder.templateRecipes()) {
             pending.add(save(cache, this.recipes.json(recipe.id()), recipeJson(recipe)));
+        }
+        for (final TierDomain domain : ShippedLadder.domains()) {
+            final List<String> values = ShippedLadder.baseTagValues(domain);
+            if (values.isEmpty()) {
+                continue;
+            }
+            // The tag path comes from the same mapping the runtime resolves domains through, so the
+            // file a pack edits and the tag the mod reads can never disagree.
+            final String path = TieredEchoesTagKeys.forDomain(domain).orElseThrow().location().getPath();
+            pending.add(save(cache, this.tags.json(new ResourceLocation(TieredEchoes.MOD_ID, path)), tagJson(values)));
         }
         return CompletableFuture.allOf(pending.toArray(CompletableFuture[]::new));
     }
@@ -167,6 +181,16 @@ public final class TieredEchoesDataProvider implements DataProvider {
         result.addProperty("item", recipe.template().toString());
         result.addProperty("count", 2);
         json.add("result", result);
+        return json;
+    }
+
+    /** A domain's base tag: the convention tags an item joins to become tierable in that domain. */
+    private static JsonObject tagJson(final List<String> values) {
+        final JsonObject json = new JsonObject();
+        json.addProperty("replace", false);
+        final JsonArray array = new JsonArray();
+        values.forEach(array::add);
+        json.add("values", array);
         return json;
     }
 

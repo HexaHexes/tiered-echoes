@@ -64,8 +64,8 @@ minecraft {
         // build.
         //
         // The output must NOT be src/main/resources. A Forge data run owns its output directory and
-        // wipes whatever it did not just generate, which would delete the hand-authored tags,
-        // GameTest structures, assets and mods.toml on every run.
+        // wipes whatever it did not just generate, which would delete the hand-authored GameTest
+        // structures, assets and mods.toml on every run.
         data {
             workingDirectory project.file('run-data')
             args '--mod', mod_id, '--all',
@@ -152,7 +152,7 @@ afterEvaluate {
 
 // The committed datagen output ships in the jar alongside src/main/resources. The two directories
 // deliberately do not overlap: datagen owns data/tieredechoes/{tiers, tier_paths, tier_templates,
-// recipes/templates}, and everything else is hand-authored.
+// recipes/templates, tags/items}, and everything else is hand-authored.
 sourceSets.main.resources.srcDir 'src/generated/resources'
 
 tasks.named('processResources', ProcessResources).configure {

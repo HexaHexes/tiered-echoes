@@ -101,6 +101,20 @@ public final class ShippedLadder {
     }
 
     /**
+     * The convention tags a domain's base tag carries, so modded gear joins a ladder with no
+     * datapack of its own. Only the built-in domains have values: the domains that ship no ladder
+     * ship no base tag either, matching how their JSON shipment is withheld ({@link #domains()}).
+     */
+    public static List<String> baseTagValues(final TierDomain domain) {
+        return switch (domain) {
+            case WEAPON -> List.of("#minecraft:swords", "#minecraft:axes", "#forge:tools/tridents");
+            case TOOL -> List.of("#minecraft:pickaxes", "#minecraft:shovels", "#minecraft:hoes", "#minecraft:axes");
+            case ARMOR -> List.of("#forge:armors");
+            default -> List.of();
+        };
+    }
+
+    /**
      * Templates the mod ships.
      *
      * <p>Upgrade only. A downgrade route is opt-in twice over — the pack has to declare a
