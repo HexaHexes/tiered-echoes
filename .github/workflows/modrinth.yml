@@ -42,8 +42,8 @@ jobs:
     # Edit these two lines when promoting this file into a repo. Loader names
     # are Modrinth's lowercase names ("neoforge", "forge").
     env:
-      MINECRAFT_VERSION: '1.21.1'
-      MOD_LOADERS: '["neoforge"]'
+      MINECRAFT_VERSION: '1.20.1'
+      MOD_LOADERS: '["Forge"]'
       GH_TOKEN: ${{ github.token }}
       # Either the release event or the dispatch input, never both.
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
