@@ -2,23 +2,21 @@ name: Version Bump
 
 # Opens an isolated version-bump PR on demand.
 #
-# Separate from Release, which reacts to pushes already on main. This is the
-# deliberate act of raising the version, and it produces a PR rather than a
-# commit because the version-bump CI check is what decides whether the bump is
-# allowed - a workflow that force-pushes to main would sidestep its own guard.
+# Separate from Release, which reacts to pushes already on the default branch. This is
+# the deliberate act of raising the version, and it produces a PR rather than a commit
+# because the version-bump CI check is what decides whether the bump is allowed - a
+# workflow that force-pushes would sidestep its own guard.
 #
-# The PR it opens touches gradle.properties and nothing else, and asserts as
-# much before pushing: the same rule CI enforces. Bundling a bump with work is
-# deliberately not offered here. CI permits it only for -alpha suffixes, and
-# alphas are nightlies, not what a human means when they click "Run".
+# The PR it opens touches gradle.properties and nothing else, and asserts as much before
+# pushing: the same rule CI enforces.
 
 on:
   workflow_dispatch:
     inputs:
       bump:
         description: >-
-          Which part of the version to raise. Ignored once a pre-release train
-          has started - the base was chosen when it began.
+          Which part of the version to raise. Ignored once a pre-release train has
+          started - the base was chosen when it began.
         type: choice
         required: true
         default: minor
@@ -29,8 +27,9 @@ on:
           - none
       channel:
         description: >-
-          stable leaves a clean version. beta appends -beta.N, incrementing
-          while the version stays a pre-release of the same base.
+          stable leaves a clean version. beta appends -beta.NN and alpha appends -alpha.NN (two digits, zero-padded), each incrementing while the version stays a pre-release of the
+          same base. Alphas are GitHub-only releases (modrinth.yml never publishes
+          them).
         type: choice
         required: true
         default: stable
@@ -42,9 +41,13 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # The no-BUMP_PR_TOKEN fallback runs `gh workflow run ci.yml --ref <branch>`;
+  # creating a dispatch event requires actions:write on this token, or the step
+  # 403s and marks an otherwise successful bump run as failed (issue #94).
+  actions: write
 
-# Never cancelled. A branch pushed with no PR open is harder to clean up than
-# a slow run is to wait for.
+# Never cancelled. A branch pushed with no PR open is harder to clean up than a slow run
+# is to wait for.
 concurrency:
   group: version-bump
   cancel-in-progress: false
@@ -54,9 +57,6 @@ jobs:
     name: open-bump-pr
     runs-on: ubuntu-latest
     steps:
-      # fetch-depth 0 because the advisory check below reads tags, and because
-      # the token here is what authenticates the later push. Using the bump PAT
-      # for checkout is what lets git push without reconfiguring credentials.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -73,7 +73,6 @@ jobs:
           CURRENT=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
           echo "current mod_version: $CURRENT"
 
-          # Split 0.2.0-beta.1 into base 0.2.0 and suffix beta.1.
           BASE="${CURRENT%%-*}"
           SUFFIX=""
           if [ "$CURRENT" != "$BASE" ]; then
@@ -92,9 +91,6 @@ jobs:
           PATCH=$(printf '%s' "$BASE" | cut -d. -f3)
 
           if [ -n "$SUFFIX" ]; then
-            # Already in a pre-release train. The base was chosen when the train
-            # started, so re-raising it here would silently abandon that release
-            # in favour of one nobody asked for.
             echo "Already a pre-release ($CURRENT); keeping base $BASE."
             NEW_BASE="$BASE"
           else
@@ -103,10 +99,7 @@ jobs:
               minor) NEW_BASE="$MAJOR.$((MINOR + 1)).0" ;;
               patch) NEW_BASE="$MAJOR.$MINOR.$((PATCH + 1))" ;;
               none)  NEW_BASE="$BASE" ;;
-              *)
-                echo "::error::Unknown bump '$BUMP'."
-                exit 1
-                ;;
+              *) echo "::error::Unknown bump '$BUMP'."; exit 1 ;;
             esac
           fi
 
@@ -116,69 +109,28 @@ jobs:
               echo "Cutting $NEW_BASE out of the $CURRENT pre-release train."
             fi
           else
-            # A beta number carries over only while the base does not move.
-            # A new base always starts the count again, so 0.2.0-beta.1 does not
-            # follow 0.1.0-beta.4.
+            # beta and alpha share one shape: the channel name IS the suffix, so
+            # -beta.2 continues a beta train and -alpha.3 continues an alpha train
+            # on the same base. The suffix must match the REQUESTED channel, so
+            # switching channels restarts at 01 rather than carrying the count.
+            # Owner ruling (issue #98): counters are always two digits, and the
+            # 10# keeps a padded suffix (08/09) from being read as octal.
             N=1
-            if [ -n "$SUFFIX" ] && [ "$NEW_BASE" = "$BASE" ] && printf '%s' "$SUFFIX" | grep -Eq '^beta\.[0-9]+$'; then
-              N=$((${SUFFIX#beta.} + 1))
+            if [ -n "$SUFFIX" ] && [ "$NEW_BASE" = "$BASE" ] && printf '%s' "$SUFFIX" | grep -Eq "^${CHANNEL}\.[0-9]+$"; then
+              N=$((10#${SUFFIX#*.} + 1))
             fi
-            NEW_VERSION="${NEW_BASE}-beta.${N}"
+            NEW_VERSION=$(printf '%s-%s.%02d' "$NEW_BASE" "$CHANNEL" "$N")
           fi
 
           if [ "$NEW_VERSION" = "$CURRENT" ]; then
             echo "::error::This run produces no change: $CURRENT -> $NEW_VERSION."
-            echo "::error::Choose a bump, or switch channel to beta to open a pre-release of $BASE."
+            echo "::error::Choose a bump, or switch channel to beta or alpha to open a pre-release of $BASE."
             exit 1
           fi
 
           echo "new mod_version: $NEW_VERSION"
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "branch=version-bump/$NEW_VERSION" >> "$GITHUB_OUTPUT"
-
-      # Advisory only. ci.yml enforces this as a hard failure, and copying the
-      # rule in full here risks the two drifting apart until the workflow
-      # promises something CI refuses. This exists so the reason arrives before
-      # the PR does rather than as a red check after it.
-      - name: Warn if CI will reject the bump
-        env:
-          GH_TOKEN: ${{ secrets.BUMP_PR_TOKEN || github.token }}
-          NEW_VERSION: ${{ steps.version.outputs.version }}
-          CHANNEL: ${{ inputs.channel }}
-        run: |
-          set -euo pipefail
-
-          if [ "$CHANNEL" != "stable" ]; then
-            echo "Pre-release bump. CI's magnitude rule applies to the next clean bump, not this one."
-            exit 0
-          fi
-
-          BASELINE=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
-          if [ -z "$BASELINE" ]; then
-            echo "No stable tag yet. Nothing to be compatible with."
-            exit 0
-          fi
-
-          OLD="${BASELINE#v}"
-          MAJ_NEW=$(printf '%s' "$NEW_VERSION" | cut -d. -f1)
-          MIN_NEW=$(printf '%s' "$NEW_VERSION" | cut -d. -f2)
-          MAJ_OLD=$(printf '%s' "$OLD" | cut -d. -f1)
-          MIN_OLD=$(printf '%s' "$OLD" | cut -d. -f2)
-
-          if [ "$MAJ_NEW" -gt "$MAJ_OLD" ] || [ "$MIN_NEW" -gt "$MIN_OLD" ]; then
-            echo "$OLD -> $NEW_VERSION raises major or minor."
-            exit 0
-          fi
-
-          BREAKING=$(gh pr list --state merged --label breaking \
-            --search "merged:>=$(git log -1 --format=%cI "$BASELINE")" \
-            --json number --jq 'length' || true)
-
-          if [ -n "$BREAKING" ] && [ "$BREAKING" != "0" ]; then
-            echo "::warning::$BREAKING breaking PR(s) merged since $BASELINE, and $NEW_VERSION raises neither major nor minor. ci.yml will fail this PR."
-          else
-            echo "No breaking PRs merged since $BASELINE."
-          fi
 
       - name: Branch, commit and push
         env:
@@ -201,7 +153,6 @@ jobs:
               -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
               commit -m "Bump mod_version to $NEW_VERSION"
 
-          # The bump commit must be pure, or CI rejects it and the PR opens red.
           TOUCHED=$(git show --name-only --format= HEAD)
           if [ "$TOUCHED" != "gradle.properties" ]; then
             echo "::error::Bump commit touched more than gradle.properties:"
@@ -223,7 +174,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          CURRENT=$(git show origin/main:gradle.properties | grep '^mod_version=' | cut -d= -f2 | tr -d '[:space:]')
+          # Resolve the default branch instead of hardcoding master/main, so this
+          # workflow is correct in any repo regardless of its branch naming.
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+
+          CURRENT=$(git show "origin/$DEFAULT_BRANCH:gradle.properties" | grep '^mod_version=' | cut -d= -f2 | tr -d '[:space:]')
 
           cat > body.md <<EOF
           ## Changeset
@@ -232,7 +187,7 @@ jobs:
           (bump: \`$BUMP\`, channel: \`$CHANNEL\`).
 
           \`gradle.properties\` is the only file changed. That is not tidiness -
-          the \`version-bump\` CI check fails any beta or stable bump that
+          the \`version-bump\` CI check fails any non-alpha bump that
           arrives with any other file, so a red check here would mean the
           workflow misbehaved rather than that anything about the version is
           wrong.
@@ -245,8 +200,10 @@ jobs:
 
           if [ "$CHANNEL" = "stable" ]; then
             echo "- [x] New version is a clean bump (\`$NEW_VERSION\`) - releases as stable" >> body.md
+          elif [ "$CHANNEL" = "alpha" ]; then
+            echo "- [x] New version has an \`-alpha.N\` suffix (\`$NEW_VERSION\`) - GitHub-only prerelease" >> body.md
           else
-            echo "- [x] New version has a \`-beta\` suffix (\`$NEW_VERSION\`) - releases as beta" >> body.md
+            echo "- [x] New version has a \`-beta.N\` suffix (\`$NEW_VERSION\`) - releases as beta" >> body.md
           fi
 
           cat >> body.md <<EOF
@@ -257,25 +214,18 @@ jobs:
 
           Tick only if this bump ships a breaking change that has not already been
           labelled on its own PR; the magnitude rule reads merged PRs, not this one.
-
-          ## Not included
-
-          - \`gradlew build\` / \`runGameTestServer\` - nothing executable changed.
-          - README / docs - the version is not user-facing documentation.
           EOF
 
-          URL=$(gh pr create --base main --head "$BRANCH" \
+          URL=$(gh pr create --base "$DEFAULT_BRANCH" --head "$BRANCH" \
             --title "Bump mod_version to $NEW_VERSION" \
             --body-file body.md)
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "Opened $URL"
 
       # The recursion guard. GitHub deliberately does not run workflows for the
-      # pull_request event raised by the default GITHUB_TOKEN, so a PR this
-      # workflow opens with it would sit with no checks at all - and with
-      # required status checks, no way to merge but admin. Dispatching CI on the
-      # branch reports the same job names, so the required checks still arrive.
-      # With a PAT the pull_request event fires normally and this is skipped.
+      # pull_request event raised by the default GITHUB_TOKEN, so a PR this workflow
+      # opens with it would sit with no checks at all. Dispatching CI on the branch
+      # reports the same job names, so the required checks still arrive.
       - name: Run CI on the branch
         env:
           GH_TOKEN: ${{ secrets.BUMP_PR_TOKEN || github.token }}
