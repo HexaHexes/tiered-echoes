@@ -27,3 +27,34 @@ mandatory=true
 versionRange="${minecraft_version_range}"
 ordering="NONE"
 side="BOTH"
+
+# Optional integration targets - presence-only gates: each compat class
+# checks ModList before touching the target, so absence no-ops. Floors are
+# "[0,)" because no API surface is pinned (Forge-era schema: mandatory=false).
+[[dependencies.${mod_id}]]
+modId="apotheosis"
+mandatory=false
+versionRange="[0,)"
+ordering="AFTER"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="ars_nouveau"
+mandatory=false
+versionRange="[0,)"
+ordering="AFTER"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="irons_spellbooks"
+mandatory=false
+versionRange="[0,)"
+ordering="AFTER"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="legendarysurvivaloverhaul"
+mandatory=false
+versionRange="[0,)"
+ordering="AFTER"
+side="BOTH"
