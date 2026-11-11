@@ -1,6 +1,7 @@
 package org.bitwisemadness.tieredechoes.common.network.client;
 
 import org.bitwisemadness.tieredechoes.TieredEchoes;
+import org.bitwisemadness.tieredechoes.common.level.LevelService;
 import org.bitwisemadness.tieredechoes.common.network.TierDataSyncPacket;
 import org.bitwisemadness.tieredechoes.common.policy.PolicyService;
 import org.bitwisemadness.tieredechoes.common.tier.TierService;
@@ -22,7 +23,10 @@ public final class TierSyncClientHandler {
         // as-is. Resolving again here would apply a client's own (default, unset) rules to another
         // server's intent.
         PolicyService.getInstance().applyResolved(packet.policy());
-        TieredEchoes.LOGGER.debug("Applied synced tier ladder: {} tiers, policy {}",
-                packet.tiers().size(), packet.policy());
+        // The curves carry no gamerule half — they are the datapack's answer wherever they are read
+        // — so there is nothing to resolve, only to adopt.
+        LevelService.getInstance().replaceAll(packet.levelConfig());
+        TieredEchoes.LOGGER.debug("Applied synced tier ladder: {} tiers, policy {}, levels {}",
+                packet.tiers().size(), packet.policy(), packet.levelConfig());
     }
 }

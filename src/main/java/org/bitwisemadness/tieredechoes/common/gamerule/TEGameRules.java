@@ -36,6 +36,16 @@ public final class TEGameRules {
     /** Overrides {@code level_up}: whether an item may gain a level. */
     private static GameRules.Key<GameRules.IntegerValue> LEVEL_UP;
 
+    /** Read accessor for gametests and other readers outside this class: the levelling master switch. */
+    public static GameRules.Key<GameRules.IntegerValue> levelsKey() {
+        return LEVELS;
+    }
+
+    /** Read accessor for gametests and other readers outside this class: the per-item level-up switch. */
+    public static GameRules.Key<GameRules.IntegerValue> levelUpKey() {
+        return LEVEL_UP;
+    }
+
     /** Overrides {@code downgrades}: whether the smithing downgrade route is published. */
     private static GameRules.Key<GameRules.IntegerValue> DOWNGRADES;
 

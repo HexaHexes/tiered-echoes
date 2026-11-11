@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Optional;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.item.Rarity;
+import org.bitwisemadness.tieredechoes.common.level.LevelConfig;
+import org.bitwisemadness.tieredechoes.common.level.LevelCurve;
 import org.bitwisemadness.tieredechoes.common.policy.TierPolicy;
 import org.bitwisemadness.tieredechoes.common.tier.IngredientMatcher;
 import org.bitwisemadness.tieredechoes.common.tier.TierDefinition;
@@ -27,7 +29,7 @@ class TierDataSyncPacketTest {
         // happily if the fields were dropped from the wire entirely.
         final TierPolicy policy = new TierPolicy(false, false, false, false, false);
         final List<TierDefinition> tiers = List.of(tier("common", 0, Rarity.COMMON), tier("uncommon", 1, Rarity.UNCOMMON));
-        final TierDataSyncPacket original = new TierDataSyncPacket(tiers, policy);
+        final TierDataSyncPacket original = new TierDataSyncPacket(tiers, policy, LevelConfig.defaults());
         final FriendlyByteBuf buf = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
 
         TierDataSyncPacket.encode(original, buf);
@@ -35,6 +37,7 @@ class TierDataSyncPacketTest {
 
         assertEquals(tiers, decoded.tiers());
         assertEquals(policy, decoded.policy());
+        assertEquals(LevelConfig.defaults(), decoded.levelConfig());
     }
 
     /** Every switch reaches the client, so a forced-off rule does not stop at the server. */
@@ -45,15 +48,31 @@ class TierDataSyncPacketTest {
                     (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0, (bits & 8) != 0, (bits & 16) != 0);
 
             final FriendlyByteBuf buf = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
-            TierDataSyncPacket.encode(new TierDataSyncPacket(List.of(), policy), buf);
+            TierDataSyncPacket.encode(new TierDataSyncPacket(List.of(), policy, LevelConfig.defaults()), buf);
 
             assertEquals(policy, TierDataSyncPacket.decode(buf).policy(), "bits " + Integer.toBinaryString(bits));
         }
     }
 
+    /**
+     * The curves are the whole of what the progress line quotes, so they have to arrive intact —
+     * a client computing the next level's cost from the wrong exponent would show a threshold the
+     * server would never charge.
+     */
+    @Test
+    void theLevelConfigSurvivesTheRoundTrip() {
+        final LevelConfig config = new LevelConfig(25,
+                LevelCurve.exponential(12.5D, 1.8D), LevelCurve.polynomial(0.05D, 1.5D));
+
+        final FriendlyByteBuf buf = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        TierDataSyncPacket.encode(new TierDataSyncPacket(List.of(), TierPolicy.defaults(), config), buf);
+
+        assertEquals(config, TierDataSyncPacket.decode(buf).levelConfig());
+    }
+
     @Test
     void anEmptyLadderStillEncodesRatherThanOptimisingTheCountAway() {
-        final TierDataSyncPacket original = new TierDataSyncPacket(List.of(), TierPolicy.defaults());
+        final TierDataSyncPacket original = new TierDataSyncPacket(List.of(), TierPolicy.defaults(), LevelConfig.defaults());
         final FriendlyByteBuf buf = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
 
         TierDataSyncPacket.encode(original, buf);
@@ -61,6 +80,7 @@ class TierDataSyncPacketTest {
 
         assertEquals(List.of(), decoded.tiers());
         assertEquals(TierPolicy.defaults(), decoded.policy());
+        assertEquals(LevelConfig.defaults(), decoded.levelConfig());
     }
 
     /** The constructor defensive-copies, so a caller mutating its list cannot alter a sent payload. */
@@ -68,7 +88,7 @@ class TierDataSyncPacketTest {
     void payloadDoesNotAliasItsInputList() {
         final java.util.ArrayList<TierDefinition> tiers = new java.util.ArrayList<>();
         tiers.add(tier("common", 0, Rarity.COMMON));
-        final TierDataSyncPacket packet = new TierDataSyncPacket(tiers, TierPolicy.defaults());
+        final TierDataSyncPacket packet = new TierDataSyncPacket(tiers, TierPolicy.defaults(), LevelConfig.defaults());
 
         tiers.clear();
 
